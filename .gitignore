@@ -118,4 +118,10 @@ docs/_build/
 # PyBuilder
 target/
 
+# windows
+*.dll
+
+# pycharm
+.idea/
+
 # Created by .ignore support plugin (hsz.mobi)
