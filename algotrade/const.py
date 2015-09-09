@@ -3,7 +3,7 @@
 
 __author__ = 'phil.zhang'
 
-from enum import Enum, enum
+from enum import Enum
 
 EVENT_TYPE = Enum(
     'EVENT_TYPE',
@@ -37,3 +37,10 @@ class FREQUENCY(Enum):
     DAY = 24 * 60 * 60,
     WEEK = 24 * 60 * 60 * 7,
     MONTH = 24 * 60 * 60 * 31
+
+
+class OrderStatus(Enum):
+    ACCEPTED = 1  # BaseOrder has been acknowledged by the broker.
+    CANCELED = 2  # BaseOrder has been canceled.
+    PARTIALLY_FILLED = 3  # BaseOrder has been partially filled.
+    FILLED = 4  # BaseOrder has been completely filled.
