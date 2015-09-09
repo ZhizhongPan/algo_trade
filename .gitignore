@@ -78,6 +78,9 @@ eggs/
 .eggs/
 lib/
 lib64/
+/algotrade/orcl-2000.csv
+/algotrade/test.ipynb
+/chinese.txt
 parts/
 sdist/
 var/
@@ -117,9 +120,13 @@ docs/_build/
 
 # PyBuilder
 target/
+/algotrade/.ipynb_checkpoints
 
 # windows
 *.dll
+
+# datafile
+*.csv
 
 # pycharm
 .idea/
