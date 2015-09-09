@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 import talib as ta
 from talib.abstract import Function
+from numba import jit
+
 
 def ACC(prices, timeperiod=12):
     """
@@ -13,7 +15,7 @@ def ACC(prices, timeperiod=12):
     :return: acc
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
     df_price = prices.copy()
@@ -23,6 +25,7 @@ def ACC(prices, timeperiod=12):
     ret = mom - mom.shift(timeperiod)
 
     return ret
+
 
 # def ADOSC(self):
 
@@ -51,7 +54,7 @@ def ACC(prices, timeperiod=12):
 #     # turnover:成交额
 #     def turnover_this_week(self):
 #         pass
-
+@jit
 def ACD(prices, timeperiod=14):
     """
     DIF = CLOSE-IF(CLOSE>CLOSE[1],MIN(LOW,CLOSE[1]),MAX(HIGH,CLOSE[1]))
@@ -62,24 +65,42 @@ def ACD(prices, timeperiod=14):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
-    df_price['close1'] = df_price['close'].shift(1)
+    # df_price = prices.copy()
+    df_price = prices.sort(ascending=True)
+    close1 = df_price['close'].shift(1).values
+    close = df_price['close'].values
+    low = df_price['low'].values
+    high = df_price['high'].values
 
-    def _dif(row):
-        ret1 = min(row['low'], row['close1']) if row['close'] > row[
-            'close1'] else max(row['high'], row['close1'])
-        return row['close'] - ret1
+    dif = np.zeros_like(close1, dtype=float)
 
-    df_price['DIF'] = df_price.apply(_dif, axis=1)
+    for idx in xrange(len(dif)):
+        dif[idx] = close[idx] - (min(low[idx], close1[idx]) if close[idx] > close1[idx] else max(high[idx], close1[idx]))
+
+    # def _dif(row):
+    #     ret1 = min(row['low'], row['close1']) if row['close'] > row[
+    #         'close1'] else max(row['high'], row['close1'])
+    #     return row['close'] - ret1
+    #
+    # df_price['DIF'] = df_price.apply(_dif, axis=1)
+
+    def func(row):
+        return 0 if np.abs(row['close'] - row['close1']) < 1e-6 else row['DIF']
+
     # 实数判断相等
     df_price['DIF2'] = df_price.apply(
-        lambda row: 0 if np.abs(row['close'] - row['close1']) < 1e-6 else row['DIF'], axis=1)
-    acd = pd.rolling_sum(df_price['DIF2'], timeperiod)
-    return acd
+        func, axis=1)
+
+    dif2 = np.zeros_like(close, dtype=float)
+
+    for idx in xrange(len(dif2)):
+        dif2[idx] = 0 if np.isclose(close[idx], close1[idx]) else dif[idx]
+
+    acd = ta.SUM(dif2, timeperiod)
+    return pd.Series(acd, index=df_price.index)
 
 
 def ADTM(prices, timeperiod=14):
@@ -98,7 +119,7 @@ def ADTM(prices, timeperiod=14):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
     df_price = prices.copy()
@@ -146,13 +167,13 @@ def AR(prices, timeperiod=14):
     :return:AR(N)
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
     ar = pd.rolling_sum(df_price['high'] - df_price['open'], timeperiod) / \
-        pd.rolling_sum(df_price['open'] - df_price['low'], timeperiod) * 100
+         pd.rolling_sum(df_price['open'] - df_price['low'], timeperiod) * 100
     return ar
 
 
@@ -168,7 +189,7 @@ def BR(prices, timeperiod=14):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
     df_price = prices.copy()
@@ -180,7 +201,7 @@ def BR(prices, timeperiod=14):
         lambda row: max(0, row['close1'] - row['low']), axis=1)
 
     br = pd.rolling_sum(df_price['high-close1'], timeperiod) / \
-        pd.rolling_sum(df_price['close1-low'], timeperiod) * 100
+         pd.rolling_sum(df_price['close1-low'], timeperiod) * 100
     return br
 
 
@@ -196,7 +217,7 @@ def ARC(prices, timeperiod=14):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
     df_price = prices.copy()
@@ -230,7 +251,7 @@ def ASI(prices, timeperiod=14):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
     df_price = prices.copy()
@@ -286,7 +307,7 @@ def BBI(prices, timeperiod1=3, timeperiod2=6, timeperiod3=12, timeperiod4=24):
     """
     assert prices is not None
     timeperiod = max(timeperiod1, timeperiod2, timeperiod3, timeperiod4)
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod1, int)
     assert isinstance(timeperiod2, int)
     assert isinstance(timeperiod3, int)
@@ -315,7 +336,7 @@ def BIAS(prices, timeperiod=14):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
     df_price = prices.copy()
@@ -340,19 +361,21 @@ def CMF(prices, timeperiod=20):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
     df_price['high_close'] = df_price['high'] - df_price['close']
     df_price['CLV'] = df_price.apply(
-        lambda row: ((row['close'] - row['low']) - row['high_close']) / row['high_close'] * row['volume'] if not np.isclose(row['high_close'], 0) else row['volume'], axis=1
+        lambda row: ((row['close'] - row['low']) - row['high_close']) / row['high_close'] * row['volume'] if not np.isclose(row['high_close'], 0) else row[
+            'volume'], axis=1
     )
     SUM = pd.rolling_sum
     cmf = SUM(df_price['CLV'], timeperiod) / \
-        SUM(df_price['volume'], timeperiod)
+          SUM(df_price['volume'], timeperiod)
     return cmf
+
 
 # def CHV(prices, timeperiod=10):
 #     """
@@ -389,19 +412,19 @@ def CMF(prices, timeperiod=20):
 #     """
 #     #
 #     assert prices is not None
-#     _assert_greater(len(prices), timeperiod)
+#     _assert_greater_or_equal(len(prices), timeperiod)
 #     assert isinstance(timeperiod, int)
 #
 #     df_price = prices.copy()
 # df_price = df_price.sort_index(ascending=True)
-#     df_price['ewma-hl'] = ta.EMA((df_price['high'] - df_price['low']).values,
+#     df_price['ewma-hl'] = ta.EMA((df_price['high'] - df_price['low']).values.astype(float),
 #                                  timeperiod=timeperiod)
 #     hl_n = df_price['ewma-hl'].shift(timeperiod)
 #     chv = (df_price['ewma-hl'] - hl_n) / hl_n * 100
 #
 #     return chv
 
-
+@jit
 def CVI(prices, timeperiod=14):
     """
     说明：蔡金波动性指标-- 计算最高价和最低价之间的价差。
@@ -419,22 +442,35 @@ def CVI(prices, timeperiod=14):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
     EMA = ta.EMA
 
-    ema_high_low = EMA(
-        (df_price['high'] - df_price['low']).values, timeperiod=timeperiod)
-    df_price['ema_high_low'] = ema_high_low
-    df_price['ema_high_low_N'] = df_price['ema_high_low'].shift(timeperiod)
-    df_price['CVI'] = df_price.apply(
-        lambda row: (row['ema_high_low'] - row['ema_high_low_N']) / row['ema_high_low'] * 100 if not np.isclose(row['ema_high_low'], 0) else 0, axis=1
-    )
+    high_low = (df_price['high'] - df_price['low']).values.astype(float)
+    ema_high_low_N = EMA(high_low, timeperiod=timeperiod)
 
-    return df_price['CVI']
+    ema_high_low_NN = pd.Series(ema_high_low_N).shift(timeperiod).values
+    # df_price['ema_high_low'] = ema_high_low
+    # df_price['ema_high_low_N'] = df_price['ema_high_low'].shift(timeperiod)
+
+    cvi = np.zeros_like(high_low, dtype=float)
+
+    for idx in xrange(len(cvi)):
+        cvi[idx] = (ema_high_low_N[idx] - ema_high_low_NN[idx]) / ema_high_low_N[idx] * 100 if not np.isclose(
+            ema_high_low_N[idx], 0) else 0
+
+    # def func(row):
+    #     return (row['ema_high_low'] - row['ema_high_low_N']) / row['ema_high_low'] * 100 if not np.isclose(row['ema_high_low'], 0) else 0
+    #
+    # df_price['CVI'] = df_price.apply(
+    #     func, axis=1
+    # )
+
+    return cvi
+
 
 # def CMO(prices, timeperiod=20):
 #     """
@@ -457,7 +493,7 @@ def CVI(prices, timeperiod=14):
 #     :return:
 #     """
 #     assert prices is not None
-#     _assert_greater(len(prices), timeperiod)
+#     _assert_greater_or_equal(len(prices), timeperiod)
 #     assert isinstance(timeperiod, int)
 #
 #     df_price = prices.copy()
@@ -495,14 +531,14 @@ def CR(prices, timeperiod=14):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
 
     df_price['mid'] = (
-        df_price['high'] + df_price['low'] + df_price['close']) / 3
+                          df_price['high'] + df_price['low'] + df_price['close']) / 3
     df_price['mid1'] = df_price['mid'].shift(1)
     df_price['max_high_mid1'] = df_price.apply(
         lambda row: max(0, row['high'] - row['mid1']), axis=1)
@@ -510,7 +546,7 @@ def CR(prices, timeperiod=14):
         lambda row: max(0, row['mid1'] - row['low']), axis=1)
     SUM = pd.rolling_sum
     cr = SUM(df_price['max_high_mid1'], timeperiod) / \
-        SUM(df_price['max_mid1_low'], timeperiod) * 100
+         SUM(df_price['max_mid1_low'], timeperiod) * 100
     return cr
 
 
@@ -534,7 +570,7 @@ def DBCD(prices, timeperiod1=14, timeperiod2=14, timeperiod3=14):
     """
     assert prices is not None
     timeperiod = max(timeperiod1, timeperiod2, timeperiod3)
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod1, int)
     assert isinstance(timeperiod2, int)
     assert isinstance(timeperiod3, int), 'period must be positive integer'
@@ -564,7 +600,7 @@ def DDI(prices, timeperiod=20):
     """
 
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
     df_price = prices.copy()
@@ -573,10 +609,10 @@ def DDI(prices, timeperiod=20):
     df_price['low1'] = df_price['low'].shift(1)
 
     df_price['DMZ'] = df_price.apply(
-        lambda row: 0 if row['high'] + row['low'] <= row['high1'] + row['low1'] else max(abs(row['high']-row['high1']), abs(row['low']-row['low1'])), axis=1
+        lambda row: 0 if row['high'] + row['low'] <= row['high1'] + row['low1'] else max(abs(row['high'] - row['high1']), abs(row['low'] - row['low1'])), axis=1
     )
     df_price['DMF'] = df_price.apply(
-        lambda row: 0 if row['high'] + row['low'] > row['high1'] + row['low1'] else max(abs(row['high']-row['high1']), abs(row['low']-row['low1'])), axis=1
+        lambda row: 0 if row['high'] + row['low'] > row['high1'] + row['low1'] else max(abs(row['high'] - row['high1']), abs(row['low'] - row['low1'])), axis=1
     )
     SUM = pd.rolling_sum
     df_price['SUM_DMZ'] = SUM(df_price['DMZ'], timeperiod)
@@ -584,11 +620,11 @@ def DDI(prices, timeperiod=20):
     df_price['SUM_DMZ_DMF'] = df_price['SUM_DMZ'] + df_price['SUM_DMF']
     df_price['DIZ'] = df_price.apply(
         lambda row: row['SUM_DMZ'] / row['SUM_DMZ_DMF'] if not np.isclose(row['SUM_DMZ_DMF'], 0) else 0, axis=1
-        )
+    )
     df_price['DIF'] = df_price.apply(
         lambda row: row['SUM_DMF'] / row['SUM_DMZ_DMF'] if not np.isclose(row['SUM_DMZ_DMF'], 0) else 0, axis=1
-        )
-    
+    )
+
     ddi = (df_price['DIZ'] - df_price['DIF']) * 100
     return ddi
 
@@ -607,7 +643,7 @@ def DPO(prices, timeperiod=14):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
     df_price = prices.copy()
@@ -637,7 +673,7 @@ def DMI(prices, timeperiod1=5, timeperiod2=10):
     """
     assert prices is not None
     timeperiod = timeperiod1 + timeperiod2
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod1, int)
     assert isinstance(timeperiod2, int)
 
@@ -665,7 +701,7 @@ def EMV(prices):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), 1)
+    _assert_greater_or_equal(len(prices), 1)
 
     high = prices['high']
     low = prices['low']
@@ -693,7 +729,7 @@ def IMI(prices, timeperiod=14):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
     df_price = prices.copy()
@@ -753,14 +789,14 @@ def KVO(prices, timeperiod1=34, timeperiod2=55, trigger_line=13):
     """
     assert prices is not None
     timeperiod = max(timeperiod1, timeperiod2)
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod1, int)
     assert isinstance(timeperiod2, int)
 
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
     df_price['typical_price'] = (
-        df_price['high'] + df_price['low'] + df_price['close']) / 3
+                                    df_price['high'] + df_price['low'] + df_price['close']) / 3
     df_price['typical_price1'] = df_price['typical_price'].shift(1)
 
     df_price['SV'] = df_price.apply(
@@ -768,8 +804,8 @@ def KVO(prices, timeperiod1=34, timeperiod2=55, trigger_line=13):
     )
     EWA = ta.EMA
     df_price['kvo'] = EWA(
-        df_price['SV'].values, timeperiod1) - EWA(df_price['SV'].values, timeperiod2)
-    df_price['trigger_line'] = EWA(df_price['kvo'].values, trigger_line)
+        df_price['SV'].values.astype(float), timeperiod1) - EWA(df_price['SV'].values.astype(float), timeperiod2)
+    df_price['trigger_line'] = EWA(df_price['kvo'].values.astype(float), trigger_line)
     return df_price['trigger_line']
 
 
@@ -786,7 +822,7 @@ def MI(prices, timeperiod=9):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
     df_price = prices.copy()
@@ -794,12 +830,12 @@ def MI(prices, timeperiod=9):
 
     EMA = ta.EMA
     df_price['ema_high_low'] = EMA(
-        (df_price['high'] - df_price['low']).values, timeperiod=timeperiod)
+        (df_price['high'] - df_price['low']).values.astype(float), timeperiod=timeperiod)
     df_price['ema_ema_high_low'] = EMA(
-        df_price['ema_high_low'].values, timeperiod=timeperiod)
-    mi = pd.rolling_sum(
-        df_price['ema_high_low'] / df_price['ema_ema_high_low'], timeperiod)
-    return mi
+        df_price['ema_high_low'].values.astype(float), timeperiod=timeperiod)
+    df_price['MI'] = pd.rolling_sum(
+        (df_price['ema_high_low'] / df_price['ema_ema_high_low']).values.astype(float), timeperiod)
+    return df_price['MI']
 
 
 def MTM(prices, timeperiod=20):
@@ -815,7 +851,7 @@ def MTM(prices, timeperiod=20):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
     df_price = prices.copy()
@@ -832,7 +868,7 @@ def NVI(prices):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), 1)
+    _assert_greater_or_equal(len(prices), 1)
 
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
@@ -842,8 +878,8 @@ def NVI(prices):
     nvi = np.zeros(shape=(N,), dtype=np.float64)
     nvi[0] = 1000
     for ind in range(1, N):
-        nvi[ind] = nvi[ind-1] - (df_price['close']-df_price['close1'])[ind] / df_price['close1'][
-            ind] * nvi[ind-1] if df_price['volume'][ind] < df_price['volume1'][ind] else nvi[ind-1]
+        nvi[ind] = nvi[ind - 1] - (df_price['close'] - df_price['close1'])[ind] / df_price['close1'][
+            ind] * nvi[ind - 1] if df_price['volume'][ind] < df_price['volume1'][ind] else nvi[ind - 1]
 
     nvi = pd.Series(nvi, index=df_price.index)
     return nvi
@@ -868,7 +904,7 @@ def PFE(prices, timeperiod1=10, timeperiod2=5):
     """
     assert prices is not None
     timeperiod = max(timeperiod1, timeperiod2)
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod1, int)
     assert isinstance(timeperiod2, int)
 
@@ -881,10 +917,10 @@ def PFE(prices, timeperiod1=10, timeperiod2=5):
         (df_price['close'] - df_price['closen']) ** 2 + timeperiod1 ** 2)
     SUM = pd.rolling_sum
     p2 = SUM(
-        np.sqrt((df_price['close']-df_price['close1']) ** 2 + 1), timeperiod1)
+        np.sqrt((df_price['close'] - df_price['close1']) ** 2 + 1), timeperiod1)
     fet = np.sign(df_price['close'] - df_price['closen']) * p1 / p2 * 100
     EMA = ta.EMA
-    df_price['PFE'] = EMA(fet.values, timeperiod2)
+    df_price['PFE'] = EMA(fet.values.astype(float), timeperiod2)
     return df_price['PFE']
 
 
@@ -901,7 +937,7 @@ def PVI(prices):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), 1)
+    _assert_greater_or_equal(len(prices), 1)
 
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
@@ -911,8 +947,8 @@ def PVI(prices):
     pvi = np.zeros(shape=(N,), dtype=np.float64)
     pvi[0] = 1000
     for ind in range(1, N):
-        pvi[ind] = pvi[ind-1] + (df_price['close']-df_price['close1'])[ind] / df_price['close1'][
-            ind] * pvi[ind-1] if df_price['volume'][ind] > df_price['volume1'][ind] else pvi[ind-1]
+        pvi[ind] = pvi[ind - 1] + (df_price['close'] - df_price['close1'])[ind] / df_price['close1'][
+            ind] * pvi[ind - 1] if df_price['volume'][ind] > df_price['volume1'][ind] else pvi[ind - 1]
 
     pvi = pd.Series(pvi, index=df_price.index)
     return pvi
@@ -933,7 +969,7 @@ def PVT(prices):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), 1)
+    _assert_greater_or_equal(len(prices), 1)
 
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
@@ -943,10 +979,10 @@ def PVT(prices):
 
     pvt[0] = np.nan
     pvt[1] = (df_price['close'] - df_price['close1'])[1] / \
-        df_price['close1'][1] * df_price['volume'][1]
+             df_price['close1'][1] * df_price['volume'][1]
     for ind in range(2, N):
-        pvt[ind] = pvt[ind-1] + (df_price['close'] - df_price['close1'])[ind] / \
-            df_price['close1'][ind] * df_price['volume'][ind]
+        pvt[ind] = pvt[ind - 1] + (df_price['close'] - df_price['close1'])[ind] / \
+                                  df_price['close1'][ind] * df_price['volume'][ind]
 
     pvt = pd.Series(pvt, index=df_price.index)
     return pvt
@@ -964,7 +1000,7 @@ def QST(prices, timeperiod=14):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
     df_price = prices.copy()
@@ -974,6 +1010,7 @@ def QST(prices, timeperiod=14):
     return qst
 
 
+# @jit
 def RI(prices, timeperiod1=20, timeperiod2=5):
     """
     36. RI区域指标(Range Indicator, RI)
@@ -993,18 +1030,26 @@ def RI(prices, timeperiod1=20, timeperiod2=5):
     """
     assert prices is not None
     timeperiod = max(timeperiod1, timeperiod2)
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod1, int)
     assert isinstance(timeperiod2, int)
 
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
     df_price['close1'] = df_price['close'].shift(1)
+
+    def func1(row):
+        return max(row['high'] - row['low'], abs(row['close1'] - row['high']), abs(row['close1'] - row['low']))
+
     df_price['TR'] = df_price.apply(
-        lambda row: max(row['high'] - row['low'], abs(row['close1']-row['high']), abs(row['close1'] - row['low'])), axis=1
+        func1, axis=1
     )
+
+    def func2(row):
+        return row['TR'] / (row['close'] - row['close1']) if row['close'] > row['close1'] else row['TR']
+
     df_price['W'] = df_price.apply(
-        lambda row: row['TR']/(row['close'] - row['close1']) if row['close'] > row['close1'] else row['TR'], axis=1
+        func2, axis=1
     )
 
     MAX = pd.rolling_max
@@ -1012,14 +1057,89 @@ def RI(prices, timeperiod1=20, timeperiod2=5):
     MIN = pd.rolling_min
     df_price['MIN_W_N1'] = MIN(df_price['W'], timeperiod1)
 
+    def func3(row):
+        return (row['W'] - row['MIN_W_N1']) / (row['MAX_W_N1'] - row['MIN_W_N1']) * 100 if row['MAX_W_N1'] > row['MIN_W_N1'] else (row['W'] - row[
+            'MIN_W_N1']) * 100
+
     df_price['SR_N1'] = df_price.apply(
-        lambda row: (row['W'] - row['MIN_W_N1'])/(row['MAX_W_N1'] - row['MIN_W_N1']) * 100 if row['MAX_W_N1'] > row['MIN_W_N1'] else (row['W'] - row['MIN_W_N1']) * 100, axis=1
+        func3, axis=1
     )
     EMA = ta.EMA
-    df_price['RI'] = EMA(df_price['SR_N1'].values, timeperiod2)
+    df_price['RI'] = EMA(df_price['SR_N1'].values.astype(float), timeperiod2)
     return df_price['RI']
 
 
+# def RMI(prices, timeperiod1=5, timeperiod2=14):
+#     """
+#     37. RMI相对动量指标(Relative Momentum Indicator, RMI)
+#     说明：相对动量指标是相对强弱指标加上动量成分后的变形，相对动量指标从收盘价相对于n期前收盘价
+#     计算上涨交易日和下跌交易日。
+#
+#     计算方法: 默认值N1=5, N2=14
+#     UM(N1) = IF(CLOSE-CLOSE[N1]>0,CLOSE-CLOSE[N1],0)
+#     DM(N1) = IF(CLOSE-CLOSE[N1]<0,CLOSE[N1]-CLOSE,0)
+#     UA(N2) = (UA[1]*(N2-1)+UM)/N2
+#     DA(N2) = (DA[1]*(N2-1)+DM)/N2
+#     RMI = 100*(UA/(UA+DA))
+#
+#     UA初始值 = SMA(UM,N)
+#     DA初始值 = SMA(DM,N)
+#
+#     :param prices:
+#     :param N1: N1
+#     :param N2: N2
+#     :return:
+#     """
+#     assert prices is not None
+#     timeperiod = timeperiod1 + timeperiod2
+#     _assert_greater_or_equal(len(prices), timeperiod)
+#     assert isinstance(timeperiod1, int)
+#     assert isinstance(timeperiod2, int)
+#
+#     df_price = prices.copy()
+#     df_price = df_price.sort_index(ascending=True)
+#
+#     N1 = timeperiod1
+#     N2 = timeperiod2
+#     df_price['close_n1'] = df_price['close'].shift(N1)
+#
+#     def func1(row):
+#         return row['close'] - row['close_n1'] if row['close'] > row['close_n1'] else 0
+#
+#     um_n1 = df_price.apply(func1, axis=1)
+#
+#     def func2(row):
+#         return row['close_n1'] - row['close'] if row['close'] < row['close_n1'] else 0
+#
+#     dm_n1 = df_price.apply(
+#         func2, axis=1)
+#     ua = np.zeros_like(df_price['close'])
+#     da = np.zeros_like(df_price['close'])
+#
+#     SMA = ta.SMA
+#
+#     ua[:(N1 + N2)] = np.nan
+#     ua[(N1 + N2)] = SMA(um_n1.values.astype(float), N2)[(N1 + N2)]
+#
+#     da[:(N1 + N2)] = np.nan
+#     da[(N1 + N2)] = SMA(dm_n1.values.astype(float), N2)[(N1 + N2)]
+#
+#     for ind in range((N1 + N2 + 1), len(df_price)):
+#         ua[ind] = (ua[ind - 1] * (N2 - 1) + um_n1[ind]) / N2
+#         da[ind] = (da[ind - 1] * (N2 - 1) + dm_n1[ind]) / N2
+#
+#     df_price['UA'] = ua
+#     df_price['DA'] = da
+#     def func3(row):
+#         return row['UA'] / (row['UA'] + row['DA']) * 100 if not np.isclose(row['UA'] + row['DA'], 0) else 50
+#     df_price['RMI'] = df_price.apply(
+#         func3, axis=1
+#     )
+#     # df_price['RMI'] = ua /(ua + da) * 100
+#
+#     return df_price['RMI']
+
+@jit
 def RMI(prices, timeperiod1=5, timeperiod2=14):
     """
     37. RMI相对动量指标(Relative Momentum Indicator, RMI)
@@ -1043,46 +1163,51 @@ def RMI(prices, timeperiod1=5, timeperiod2=14):
     """
     assert prices is not None
     timeperiod = timeperiod1 + timeperiod2
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod1, int)
     assert isinstance(timeperiod2, int)
 
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
+    #     df_price = prices.copy()
+    df_price = prices.sort(ascending=True).astype(float)
 
     N1 = timeperiod1
     N2 = timeperiod2
-    df_price['close_n1'] = df_price['close'].shift(N1)
+    close = df_price['close'].values
+    close_n1 = df_price['close'].shift(N1).values
 
-    um_n1 = df_price.apply(
-        lambda row: row['close'] - row['close_n1'] if row['close'] > row['close_n1'] else 0, axis=1
-    )
-    dm_n1 = df_price.apply(
-        lambda row: row['close_n1'] - row['close'] if row['close'] < row['close_n1'] else 0, axis=1
-    )
-    ua = np.zeros_like(df_price['close'])
-    da = np.zeros_like(df_price['close'])
+    um_n1 = np.zeros_like(close, dtype=float)
+    for idx in xrange(len(um_n1)):
+        if close[idx] > close_n1[idx]:
+            um_n1[idx] = close[idx] - close_n1[idx]
+        else:
+            um_n1[idx] = 0.0
+
+    dm_n1 = np.zeros_like(close)
+    for idx in xrange(len(dm_n1)):
+        dm_n1[idx] = close_n1[idx] - close[idx] if close[idx] < close_n1[idx] else 0.0
+
+    ua = np.zeros_like(close, dtype=float)
+    da = np.zeros_like(close, dtype=float)
 
     SMA = ta.SMA
 
-    ua[:(N1+N2)] = np.nan
-    ua[(N1+N2)] = SMA(um_n1.values, N2)[(N1+N2)]
+    ua[:(N1 + N2)] = np.nan
+    ua[(N1 + N2)] = SMA(um_n1, N2)[(N1 + N2)]
 
-    da[:(N1+N2)] = np.nan
-    da[(N1+N2)] = SMA(dm_n1.values, N2)[(N1+N2)]
+    da[:(N1 + N2)] = np.nan
+    da[(N1 + N2)] = SMA(dm_n1, N2)[(N1 + N2)]
 
-    for ind in range((N1+N2+1), len(df_price)):
-        ua[ind] = (ua[ind-1] * (N2-1) + um_n1[ind]) / N2
-        da[ind] = (da[ind-1] * (N2-1) + dm_n1[ind]) / N2
+    for ind in xrange((N1 + N2 + 1), len(close)):
+        ua[ind] = (ua[ind - 1] * (N2 - 1) + um_n1[ind]) / N2
+        da[ind] = (da[ind - 1] * (N2 - 1) + dm_n1[ind]) / N2
 
-    df_price['UA'] = ua
-    df_price['DA'] = da
-    df_price['RMI'] = df_price.apply(
-        lambda row: row['UA']/(row['UA'] + row['DA']) * 100 if not np.isclose(row['UA'] + row['DA'], 0) else 50, axis=1
-    )
-    # df_price['RMI'] = ua /(ua + da) * 100
+    rmi = np.zeros_like(close, dtype=float)
 
-    return df_price['RMI']
+    for idx in xrange(len(rmi)):
+        rmi[idx] = ua[idx] / (ua[idx] + da[idx]) * 100 if not np.isclose(ua[idx] + da[idx], 0) else 50
+
+    rmi = pd.Series(rmi, index=df_price.index)
+    return rmi
 
 
 def RVI(prices, timeperiod1=10, timeperiod2=14):
@@ -1108,7 +1233,7 @@ def RVI(prices, timeperiod1=10, timeperiod2=14):
     """
     assert prices is not None
     timeperiod = timeperiod1 + timeperiod2
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod1, int)
     assert isinstance(timeperiod2, int)
     df_price = prices.copy()
@@ -1117,26 +1242,32 @@ def RVI(prices, timeperiod1=10, timeperiod2=14):
     N2 = timeperiod2
 
     def _UM(price, N1):
-        df_price[price+str(1)] = df_price[price].shift(1)
+        df_price[price + str(1)] = df_price[price].shift(1)
         STD = pd.rolling_std
-        std_price_n1 = 'std_'+price + '_' + str(N1)
+        std_price_n1 = 'std_' + price + '_' + str(N1)
         df_price[std_price_n1] = STD(df_price[price], N1)
 
+        def func(row):
+            return row[std_price_n1] if row[price] > row[price + str(1)] else 0
+
         um = df_price.apply(
-            lambda row: row[std_price_n1] if row[price] > row[price+str(1)] else 0, axis=1
+            func, axis=1
         )
         um[:N1] = np.nan
         # print('um={0}'.format(um))
         return um
 
     def _DM(price, N1):
-        df_price[price+str(1)] = df_price[price].shift(1)
+        df_price[price + str(1)] = df_price[price].shift(1)
         STD = pd.rolling_std
-        std_price_n1 = 'std_'+price + '_' + str(N1)
+        std_price_n1 = 'std_' + price + '_' + str(N1)
         df_price[std_price_n1] = STD(df_price[price], N1)
 
+        def func(row):
+            return row[std_price_n1] if row[price] < row[price + str(1)] else 0
+
         dm = df_price.apply(
-            lambda row: row[std_price_n1] if row[price] < row[price+str(1)] else 0, axis=1
+            func, axis=1
         )
         dm[:N1] = np.nan
         # print('dm={0}'.format(dm))
@@ -1147,13 +1278,13 @@ def RVI(prices, timeperiod1=10, timeperiod2=14):
         um = _UM(price, N1)
         SMA = ta.SMA
 
-        ua[:(N1+N2)] = np.nan
+        ua[:(N1 + N2)] = np.nan
 
-        sma_um_n2 = SMA(um.values, N2)
-        ua[(N1+N2)] = sma_um_n2[(N1+N2)]
+        sma_um_n2 = SMA(um.values.astype(float), N2)
+        ua[(N1 + N2)] = sma_um_n2[(N1 + N2)]
 
-        for ind in range((N1+N2+1), len(df_price)):
-            ua[ind] = (ua[ind-1] * (N2-1) + um[ind]) / N2
+        for ind in range((N1 + N2 + 1), len(df_price)):
+            ua[ind] = (ua[ind - 1] * (N2 - 1) + um[ind]) / N2
         ua = pd.Series(ua, index=um.index)
         # print('ua={0}'.format(ua))
         return ua
@@ -1164,11 +1295,11 @@ def RVI(prices, timeperiod1=10, timeperiod2=14):
 
         dm_n1 = _DM(price, N1)
         da = np.zeros_like(df_price[price])
-        da[:(N1+N2)] = np.nan
-        sma_dm_n2 = SMA(dm_n1.values, N2)
-        da[(N1+N2)] = sma_dm_n2[(N1+N2)]
-        for ind in range((N1+N2+1), len(df_price)):
-            da[ind] = (da[ind-1] * (N2-1) + dm_n1[ind]) / N2
+        da[:(N1 + N2)] = np.nan
+        sma_dm_n2 = SMA(dm_n1.values.astype(float), N2)
+        da[(N1 + N2)] = sma_dm_n2[(N1 + N2)]
+        for ind in range((N1 + N2 + 1), len(df_price)):
+            da[ind] = (da[ind - 1] * (N2 - 1) + dm_n1[ind]) / N2
         # print('da={0}'.format(da))
         da = pd.Series(da, index=dm_n1.index)
         return da
@@ -1179,7 +1310,7 @@ def RVI(prices, timeperiod1=10, timeperiod2=14):
         # rs = ua / (ua + da) * 100
         rs = np.zeros_like(ua)
         for ind in range(len(ua)):
-            rs[ind] = ua[ind]/(ua[ind] + da[ind]) * 100 if not np.isclose((ua[ind] + da[ind]), 0) else 0
+            rs[ind] = ua[ind] / (ua[ind] + da[ind]) * 100 if not np.isclose((ua[ind] + da[ind]), 0) else 0
         rs = pd.Series(rs, index=ua.index)
         return rs
 
@@ -1210,7 +1341,7 @@ def SMI(prices, timeperiod1=10, timeperiod2=3, timeperiod3=3):
     """
     assert prices is not None
     timeperiod = max(timeperiod1, timeperiod2, timeperiod3)
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod1, int)
     assert isinstance(timeperiod2, int)
     assert isinstance(timeperiod3, int)
@@ -1222,11 +1353,11 @@ def SMI(prices, timeperiod1=10, timeperiod2=3, timeperiod3=3):
           MAX(df_price['low'], timeperiod1)) / 2
     h = df_price['close'] - cn
     EMA = ta.EMA
-    df_price['SH1'] = EMA(h.values, timeperiod2)
-    df_price['SH2'] = EMA(df_price['SH1'].values, timeperiod3)
+    df_price['SH1'] = EMA(h.values.astype(float), timeperiod2)
+    df_price['SH2'] = EMA(df_price['SH1'].values.astype(float), timeperiod3)
     r = MAX(df_price['high'], timeperiod1) - MAX(df_price['low'], timeperiod1)
-    df_price['SR1'] = EMA(r.values, timeperiod2)
-    df_price['SR2'] = EMA(df_price['SR1'].values, timeperiod3) / 2
+    df_price['SR1'] = EMA(r.values.astype(float), timeperiod2)
+    df_price['SR2'] = EMA(df_price['SR1'].values.astype(float), timeperiod3) / 2
     smi = df_price['SH2'] / df_price['SR2'] * 100
     return smi
 
@@ -1246,7 +1377,7 @@ def SRSI(prices, timeperiod1=14, timeperiod2=14):
     """
     assert prices is not None
     timeperiod = max(timeperiod1, timeperiod2)
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod1, int)
     assert isinstance(timeperiod2, int)
 
@@ -1259,8 +1390,12 @@ def SRSI(prices, timeperiod1=14, timeperiod2=14):
     df_price['MAX_RSI_N_N1'] = MAX(df_price['RSI_N'], timeperiod2)
     df_price['MIN_RSI_N_N1'] = MIN(df_price['RSI_N'], timeperiod2)
     df_price['MAX_MINUS_MIN_RSI'] = df_price['MAX_RSI_N_N1'] - df_price['MIN_RSI_N_N1']
+
+    def func(row):
+        return (row['RSI_N'] - row['MAX_RSI_N_N1']) / row['MAX_MINUS_MIN_RSI'] * 100 if not np.isclose(row['MAX_MINUS_MIN_RSI'], 0) else 0
+
     df_price['SRSI'] = df_price.apply(
-        lambda row: (row['RSI_N'] - row['MAX_RSI_N_N1']) / row['MAX_MINUS_MIN_RSI'] *100 if not np.isclose(row['MAX_MINUS_MIN_RSI'], 0) else 0, axis=1)
+        func, axis=1)
     return df_price['SRSI']
 
 
@@ -1275,7 +1410,7 @@ def TS(prices, timeperiod=20):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
     df_price = prices.copy()
@@ -1305,7 +1440,7 @@ def TMA(prices, timeperiod=10, price='close'):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod+1)
+    _assert_greater_or_equal(len(prices), timeperiod + 1)
     assert isinstance(timeperiod, int)
     assert price in ('open', 'close', 'high', 'low')
     df_price = prices.copy()
@@ -1314,11 +1449,11 @@ def TMA(prices, timeperiod=10, price='close'):
     SMA = ta.SMA
 
     if timeperiod % 2 == 0:
-        df_price['TMA'] = SMA(SMA(df_price[price].values, timeperiod//2 + 1),
-                              timeperiod//2)
+        df_price['TMA'] = SMA(SMA(df_price[price].values.astype(float), timeperiod // 2 + 1),
+                              timeperiod // 2)
     else:
-        df_price['TMA'] = SMA(SMA(df_price[price].values, (timeperiod+1)//2),
-                              (timeperiod+1)//2)
+        df_price['TMA'] = SMA(SMA(df_price[price].values.astype(float), (timeperiod + 1) // 2),
+                              (timeperiod + 1) // 2)
     return df_price['TMA']
 
 
@@ -1335,14 +1470,14 @@ def TR(prices):
     """
     assert prices is not None
 
-    _assert_greater(len(prices), 1)
+    _assert_greater_or_equal(len(prices), 1)
     # assert isinstance(staticmethod, int)
     # assert price in ('open', 'close', 'high', 'low')
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
     df_price['close1'] = df_price['close'].shift(1)
     df_price['TR'] = df_price.apply(
-        lambda row: max(row['high']-row['low'], abs(row['high']-row['close1']), abs(row['low'] - row['close1'])), axis=1
+        lambda row: max(row['high'] - row['low'], abs(row['high'] - row['close1']), abs(row['low'] - row['close1'])), axis=1
     )
     return df_price['TR']
 
@@ -1367,18 +1502,18 @@ def VIDYA(prices, timeperiod=20):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
 
-    sc = 2.0/(timeperiod + 1)
+    sc = 2.0 / (timeperiod + 1)
     CMO = ta.CMO
 
-    vi = CMO(df_price['close'].values, timeperiod)
+    vi = CMO(df_price['close'].values.astype(float), timeperiod)
     vma = sc * vi * df_price['close'] + \
-        (1 - sc * vi) * df_price['close'].shift(1)
+          (1 - sc * vi) * df_price['close'].shift(1)
     return vma
 
 
@@ -1386,7 +1521,8 @@ def TSI(prices, timeperiod1=25, timeperiod2=13):
     """
     32. TSI真实强度指数（True Strength Index，TSI）
     说明：
-    真实强弱指数（True Strength Index，TSI）是相对强弱指数 (RSI) 的变体。TSI 使用价格动量的双重平滑指数移动平均线，剔除价格的震荡变化并发现趋势的变化。TSI 可帮助判断市场趋势。TSI 线上扬表示上升趋势。反之，TSI 线下挫表示下跌趋势。
+    真实强弱指数（True Strength Index，TSI）是相对强弱指数 (RSI) 的变体。TSI 使用价格动量的双重平滑指数移动平均线，
+    剔除价格的震荡变化并发现趋势的变化。TSI 可帮助判断市场趋势。TSI 线上扬表示上升趋势。反之，TSI 线下挫表示下跌趋势。
 
     计算方法:
     MOM=CLOSE-CLOSE[1]
@@ -1400,7 +1536,7 @@ def TSI(prices, timeperiod1=25, timeperiod2=13):
     """
     assert prices is not None
     timeperiod = timeperiod1 + timeperiod2
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod1, int)
     assert isinstance(timeperiod2, int)
 
@@ -1410,13 +1546,13 @@ def TSI(prices, timeperiod1=25, timeperiod2=13):
     df_price['mom'] = df_price['close'] - df_price['close'].shift(1)
 
     EMA = ta.EMA
-    df_price['EMA_EMA_MOM'] = EMA(EMA(df_price['mom'].values, timeperiod1), timeperiod2)
-    df_price['EMA_EMA_ABS_MOM'] = EMA(EMA(df_price['mom'].abs().values, timeperiod1), timeperiod2)
+    df_price['EMA_EMA_MOM'] = EMA(EMA(df_price['mom'].values.astype(float), timeperiod1), timeperiod2)
+    df_price['EMA_EMA_ABS_MOM'] = EMA(EMA(df_price['mom'].abs().values.astype(float), timeperiod1), timeperiod2)
     df_price['TSI'] = df_price.apply(
         lambda row: row['EMA_EMA_MOM'] / row['EMA_EMA_ABS_MOM'] * 100 if not np.isclose(row['EMA_EMA_ABS_MOM'], 0) else 0, axis=1
-        )
-    # tsi = EMA(EMA(df_price['mom'].values, timeperiod1), timeperiod2) / \
-    #     EMA(EMA(df_price['mom'].abs().values, timeperiod1), timeperiod2) * 100
+    )
+    # tsi = EMA(EMA(df_price['mom'].values.astype(float), timeperiod1), timeperiod2) / \
+    #     EMA(EMA(df_price['mom'].abs().values.astype(float), timeperiod1), timeperiod2) * 100
     # df_price['tsi'] = tsi
     return df_price['TSI']
 
@@ -1436,7 +1572,7 @@ def UI(prices, timeperiod=14):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
     # assert isinstance(timeperiod2, int)
 
@@ -1449,31 +1585,31 @@ def UI(prices, timeperiod=14):
     return ui
 
 
-def UPN(prices, timeperiod=14):
-    """
-    说明：
-
-    计算方法:
-    UP=IF(CLOSE>CLOSE[1],CLOSE[1]-CLOSE,0)
-    UA=(UP[1]*(N-1)+UP)/N
-    :param prices:
-    :param timeperiod:
-    :return:
-    """
-    assert prices is not None
-    _assert_greater(len(prices), timeperiod)
-    assert isinstance(timeperiod, int)
-    # assert isinstance(timeperiod2, int)
-
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
-    df_price['close1'] = df_price['close'].shift(1)
-    df_price['UP'] = df_price.apply(
-        lambda row: row['close1'] - row['close'] if row['close'] > row['close1'] else 0, axis=1
-    )
-    ua = (df_price['UP'].shift(1) * (timeperiod - 1) +
-          df_price['UP']) / timeperiod
-    return ua
+# def UPN(prices, timeperiod=14):
+#     """
+#     说明：
+#
+#     计算方法:
+#     UP=IF(CLOSE>CLOSE[1],CLOSE[1]-CLOSE,0)
+#     UA=(UP[1]*(N-1)+UP)/N
+#     :param prices:
+#     :param timeperiod:
+#     :return:
+#     """
+#     assert prices is not None
+#     _assert_greater_or_equal(len(prices), timeperiod)
+#     assert isinstance(timeperiod, int)
+#     # assert isinstance(timeperiod2, int)
+#
+#     df_price = prices.copy()
+#     df_price = df_price.sort_index(ascending=True)
+#     df_price['close1'] = df_price['close'].shift(1)
+#     df_price['UP'] = df_price.apply(
+#         lambda row: row['close1'] - row['close'] if row['close'] > row['close1'] else 0, axis=1
+#     )
+#     ua = (df_price['UP'].shift(1) * (timeperiod - 1) +
+#           df_price['UP']) / timeperiod
+#     return ua
 
 
 def VAMA(prices, timeperiod=20, price='close'):
@@ -1489,7 +1625,7 @@ def VAMA(prices, timeperiod=20, price='close'):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
     assert price in ('high', 'low', 'open', 'close')
     # assert isinstance(timeperiod2, int)
@@ -1498,8 +1634,8 @@ def VAMA(prices, timeperiod=20, price='close'):
     df_price = df_price.sort_index(ascending=True)
     SMA = ta.SMA
     df_price['VAMA'] = \
-        SMA((df_price[price] * df_price['volume']).values, timeperiod) / \
-        SMA(df_price['volume'].values, timeperiod)
+        SMA((df_price[price] * df_price['volume']).values.astype(float), timeperiod) / \
+        SMA(df_price['volume'].values.astype(float), timeperiod)
     return df_price['VAMA']
 
 
@@ -1527,7 +1663,7 @@ def VHF(prices, timeperiod=20):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
     df_price = prices.copy()
@@ -1538,8 +1674,8 @@ def VHF(prices, timeperiod=20):
     abs_colse_close1 = (df_price['close'] - df_price['close'].shift(1)).abs()
     df_price['B'] = pd.rolling_sum(abs_colse_close1, timeperiod)
     df_price['VHF'] = df_price.apply(
-        lambda row: row['A']/row['B'] if not np.isclose(row['B'], 0) else 0, axis=1
-        )
+        lambda row: row['A'] / row['B'] if not np.isclose(row['B'], 0) else 0, axis=1
+    )
     return df_price['VHF']
 
 
@@ -1567,7 +1703,7 @@ def VMACD(prices, timeperiod1=12, timeperiod2=26, timeperiod3=9):
     """
     assert prices is not None
     timeperiod = max(timeperiod1, timeperiod2, timeperiod3)
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod1, int)
     assert isinstance(timeperiod2, int)
     assert isinstance(timeperiod3, int)
@@ -1575,8 +1711,8 @@ def VMACD(prices, timeperiod1=12, timeperiod2=26, timeperiod3=9):
     df_price = df_price.sort_index(ascending=True)
 
     EMA = ta.EMA
-    short = EMA(df_price['volume'].values, timeperiod1)
-    long = EMA(df_price['volume'].values, timeperiod2)
+    short = EMA(df_price['volume'].values.astype(float), timeperiod1)
+    long = EMA(df_price['volume'].values.astype(float), timeperiod2)
     diff = short - long
     dea = EMA(diff, timeperiod3)
     vmacd = diff - dea
@@ -1603,15 +1739,15 @@ def VO(prices, timeperiod1=2, timeperiod2=5):
     """
     assert prices is not None
     timeperiod = max(timeperiod1, timeperiod2)
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod1, int)
     assert isinstance(timeperiod2, int)
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
 
     SMA = ta.SMA
-    sma_t1 = SMA(df_price['volume'].values, timeperiod1)
-    sma_t2 = SMA(df_price['volume'].values, timeperiod2)
+    sma_t1 = SMA(df_price['volume'].values.astype(float), timeperiod1)
+    sma_t2 = SMA(df_price['volume'].values.astype(float), timeperiod2)
     df_price['VO'] = (sma_t1 - sma_t2) / sma_t2 * 100
     return df_price['VO']
 
@@ -1637,7 +1773,7 @@ def VOSC(prices, timeperiod1=12, timeperiod2=26):
     """
     assert prices is not None
     timeperiod = max(timeperiod1, timeperiod2)
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod1, int)
     assert isinstance(timeperiod2, int)
     df_price = prices.copy()
@@ -1669,7 +1805,7 @@ def VR(prices, timeperiod=26):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
@@ -1686,8 +1822,8 @@ def VR(prices, timeperiod=26):
     df_price['SUM_A'] = SUM(df_price['A'], timeperiod)
     df_price['SUM_B'] = SUM(df_price['B'], timeperiod)
     df_price['VR'] = df_price.apply(
-        lambda row: row['SUM_A'] / row['SUM_B'] * 100 if not np.isclose(row['SUM_B'], 0) else 0,axis=1
-        )
+        lambda row: row['SUM_A'] / row['SUM_B'] * 100 if not np.isclose(row['SUM_B'], 0) else 0, axis=1
+    )
 
     return df_price['VR']
 
@@ -1705,7 +1841,7 @@ def VROC(prices, timeperiod=14):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
@@ -1735,7 +1871,7 @@ def VRSI(prices, timeperiod=14):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
@@ -1761,12 +1897,13 @@ def VRSI(prices, timeperiod=14):
         else:
             ret = 0
         return ret
+
     df_price['U'] = df_price.apply(_U, axis=1)
     df_price['D'] = df_price.apply(_D, axis=1)
 
-    UU = ((timeperiod-1) * df_price['U'].shift(1) + df_price['U']) / timeperiod
-    DD = ((timeperiod-1) * df_price['D'].shift(1) + df_price['D']) / timeperiod
-    vrsi = UU/(UU+DD) * 100
+    UU = ((timeperiod - 1) * df_price['U'].shift(1) + df_price['U']) / timeperiod
+    DD = ((timeperiod - 1) * df_price['D'].shift(1) + df_price['D']) / timeperiod
+    vrsi = UU / (UU + DD) * 100
     return vrsi
 
 
@@ -1786,12 +1923,13 @@ def WC(prices):
     """
     _assert_not_none(prices)
 
-    _assert_greater(len(prices), 0)
+    _assert_greater_or_equal(len(prices), 0)
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
 
     wc = (df_price['close'] * 2 + df_price['high'] - df_price['low']) / 4
     return wc
+
 
 # def WS(prices, timeperiod=5):
 #     """
@@ -1834,7 +1972,7 @@ def WAD(prices, timeperiod=14):
     :return:
     """
     assert prices is not None
-    _assert_greater(len(prices), timeperiod)
+    _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
@@ -1865,13 +2003,16 @@ def _assert_not_none(a):
     assert a is not None, str(a) + 'is None'
 
 
-def _assert_greater(a, b):
-    assert a > b, str(a) + ' must be greater than ' + str(b)
+def _assert_greater_or_equal(a, b):
+    assert a >= b, str(a) + ' must be greater than ' + str(b)
+
 
 if __name__ == '__main__':
     def main():
-        p = pd.read_csv('../data/data_2014.csv', index_col=0, parse_dates=True)
-        ret = RVI(p)
+        p = pd.read_csv('../orcl-2000.csv', index_col=0, parse_dates=True)
+        p.columns = [str.lower(col) for col in p.columns]
+        ret = CVI(p)
         print(ret)
+
 
     main()

@@ -6,7 +6,7 @@ from threading import Thread
 from collections import defaultdict
 # 第三方模块
 from PyQt4.QtCore import QTimer
-
+from numba import jit
 
 # 自己开发的模块
 # from eventType import *
@@ -75,6 +75,7 @@ class EventEngine:
         self.__handlers = defaultdict(list)
 
     # ----------------------------------------------------------------------
+    # @jit
     def run(self):
         """引擎运行"""
         while self.__active:
@@ -86,6 +87,7 @@ class EventEngine:
                 break
 
     # ----------------------------------------------------------------------
+    # @jit
     def __process(self, event):
         """处理事件"""
         # 检查是否存在对该事件进行监听的处理函数

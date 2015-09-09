@@ -14,7 +14,8 @@ from .ls_talib import QST
 from .ls_talib import RI, RMI, RVI
 from .ls_talib import SMI, SRSI
 from .ls_talib import TMA, TR, TS, TSI
-from .ls_talib import UI, UPN
+from .ls_talib import UI
+# from .ls_talib import UPN
 from .ls_talib import VAMA, VHF, VIDYA, VMACD, VO, VOSC, VR, VROC, VRSI
 from .ls_talib import WAD, WC
 
