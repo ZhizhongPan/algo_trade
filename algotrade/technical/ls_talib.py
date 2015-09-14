@@ -6,6 +6,11 @@ import pandas as pd
 import talib as ta
 from talib.abstract import Function
 from numba import jit
+import scipy.ndimage.interpolation as inp
+
+
+def is_close(a, b, tol=1e-8):
+    return np.abs(a - b) < tol
 
 
 def ACC(prices, timeperiod=12):
@@ -27,33 +32,6 @@ def ACC(prices, timeperiod=12):
     return ret
 
 
-# def ADOSC(self):
-
-#     df_price = self.price_data
-#     ret = pd.Series(
-#         data=np.nan * np.ones(len(df_price)), index=df_price.index)
-#     nozero = (df_price['high'] - df_price['low']) != 0
-#     ret[nozero] = 100 * ((df_price['high'][nozero] - df_price['open'][nozero]) +
-#                          (df_price['close'][nozero] - df_price['low'][nozero])) /\
-#         (2 * (df_price['high'][nozero] - df_price['low'][nozero]))
-
-#     return ret
-
-#     def highest_price_this_week(self):
-#         pass
-
-#     def lowest_price_this_week(self):
-#         pass
-
-#     def yield_this_week(self):
-#         pass
-
-#     def yield_last_week(self):
-#         pass
-
-#     # turnover:成交额
-#     def turnover_this_week(self):
-#         pass
 @jit
 def ACD(prices, timeperiod=14):
     """
@@ -87,12 +65,12 @@ def ACD(prices, timeperiod=14):
     #
     # df_price['DIF'] = df_price.apply(_dif, axis=1)
 
-    def func(row):
-        return 0 if np.abs(row['close'] - row['close1']) < 1e-6 else row['DIF']
-
-    # 实数判断相等
-    df_price['DIF2'] = df_price.apply(
-        func, axis=1)
+    # def func(row):
+    #     return 0 if np.abs(row['close'] - row['close1']) < 1e-6 else row['DIF']
+    #
+    # # 实数判断相等
+    # df_price['DIF2'] = df_price.apply(
+    #     func, axis=1)
 
     dif2 = np.zeros_like(close, dtype=float)
 
@@ -103,6 +81,7 @@ def ACD(prices, timeperiod=14):
     return pd.Series(acd, index=df_price.index)
 
 
+@jit
 def ADTM(prices, timeperiod=14):
     """
     说明：ADTM是用开盘价的向上波动幅度和向下波动幅度的距离差值来描述人气高低的指标。
@@ -124,30 +103,57 @@ def ADTM(prices, timeperiod=14):
 
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
-    df_price['open1'] = df_price['open'].shift(1)
-    df_price['DTM'] = df_price.apply(
-        lambda row: 0 if row['open'] <= row['open1'] else max(
-            row['high'] - row['open'], row['open'] - row['open1']), axis=1)
-    df_price['DBM'] = df_price.apply(
-        lambda row: 0 if row['open'] >= row['open1'] else max(
-            row['open'] - row['low'], row['open'] - row['open1']), axis=1)
-    df_price['STM'] = pd.rolling_sum(df_price['DTM'], timeperiod)
-    df_price['SBM'] = pd.rolling_sum(df_price['DBM'], timeperiod)
+    open = df_price['open'].values
+    open1 = df_price['open'].shift(1).values
+    high = df_price['high'].values
+    low = df_price['low'].values
 
-    def _adtm(row):
-        ret = None
-        if np.isnan(row['STM']) or np.isnan(row['SBM']):
-            ret = np.nan
-        elif row['STM'] > row['SBM']:
-            ret = (row['STM'] - row['SBM']) / row['STM']
-        elif row['STM'] < row['SBM']:
-            ret = (row['STM'] - row['SBM']) / row['SBM']
+    dtm = np.zeros_like(open1, dtype=float)
+    for idx in xrange(len(dtm)):
+        dtm[idx] = 0 if open[idx] <= open1[idx] else np.max((high[idx] - open[idx], open[idx] - open1[idx]))
+
+    # df_price['DTM'] = df_price.apply(
+    #     lambda row: 0 if row['open'] <= row['open1'] else max(
+    #         row['high'] - row['open'], row['open'] - row['open1']), axis=1)
+
+    dbm = np.zeros_like(open1, dtype=float)
+    for idx in xrange(len(dbm)):
+        dbm[idx] = 0 if open[idx] >= open1[idx] else np.max((open[idx] - low[idx], open[idx] - open1[idx]))
+
+    # df_price['DBM'] = df_price.apply(
+    #     lambda row: 0 if row['open'] >= row['open1'] else max(
+    #         row['open'] - row['low'], row['open'] - row['open1']), axis=1)
+
+    stm = ta.SUM(dtm, timeperiod)
+    sbm = ta.SUM(dbm, timeperiod)
+    # df_price['STM'] = pd.rolling_sum(df_price['DTM'], timeperiod)
+    # df_price['SBM'] = pd.rolling_sum(df_price['DBM'], timeperiod)
+
+    # def _adtm(row):
+    #     ret = None
+    #     if np.isnan(row['STM']) or np.isnan(row['SBM']):
+    #         ret = np.nan
+    #     elif row['STM'] > row['SBM']:
+    #         ret = (row['STM'] - row['SBM']) / row['STM']
+    #     elif row['STM'] < row['SBM']:
+    #         ret = (row['STM'] - row['SBM']) / row['SBM']
+    #     else:
+    #         ret = 0
+    #
+    #     return ret
+
+    adtm = np.zeros_like(open1, dtype=float)
+    for idx in xrange(len(adtm)):
+        if np.isnan(stm[idx]) or np.isnan(sbm[idx]):
+            adtm[idx] = np.nan
+        elif stm[idx] > sbm[idx]:
+            adtm[idx] = (stm[idx] - sbm[idx]) / stm[idx]
+        elif stm[idx] < sbm[idx]:
+            adtm[idx] = (stm[idx] - sbm[idx]) / sbm[idx]
         else:
-            ret = 0
+            adtm[idx] = 0
 
-        return ret
-
-    adtm = df_price.apply(_adtm, axis=1)
+    adtm = pd.Series(adtm, index=df_price.index)
     return adtm
 
 
@@ -177,6 +183,7 @@ def AR(prices, timeperiod=14):
     return ar
 
 
+@jit
 def BR(prices, timeperiod=14):
     """
     BR指标也是反映当前情况下多空双方力量争斗的结果。
@@ -194,15 +201,32 @@ def BR(prices, timeperiod=14):
 
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
-    df_price['close1'] = df_price['close'].shift(1)
-    df_price['high-close1'] = df_price.apply(
-        lambda row: max(0, row['high'] - row['close1']), axis=1)
-    df_price['close1-low'] = df_price.apply(
-        lambda row: max(0, row['close1'] - row['low']), axis=1)
+    high = df_price['high'].values
+    low = df_price['low'].values
+    # close = df_price['close'].values
 
-    br = pd.rolling_sum(df_price['high-close1'], timeperiod) / \
-         pd.rolling_sum(df_price['close1-low'], timeperiod) * 100
-    return br
+    close1 = df_price['close'].shift(1).values
+
+    high_close1 = np.zeros_like(high, dtype=float)
+    for idx in xrange(len(high_close1)):
+        high_close1[idx] = np.max((0, high[idx] - close1[idx]))
+
+    close1_low = np.zeros_like(close1, dtype=float)
+    for idx in xrange(len(close1_low)):
+        close1_low[idx] = np.max([0, close1[idx] - low[idx]])
+
+    # br = np.zeros_like(close1, dtype=float)
+    #
+    # for idx in xrange(len(br)):
+    # br = ta.SUM(high_close1, timeperiod) / ta.SUM(close1_low, timeperiod) * 100
+
+    # df_price['high-close1'] = df_price.apply(
+    #     lambda row: max(0, row['high'] - row['close1']), axis=1)
+    # df_price['close1-low'] = df_price.apply(
+    #     lambda row: max(0, row['close1'] - row['low']), axis=1)
+    SUM = pd.rolling_sum
+    br = SUM(high_close1, timeperiod) / SUM(close1_low, timeperiod) * 100
+    return pd.Series(br, index=df_price.index)
 
 
 def ARC(prices, timeperiod=14):
@@ -227,6 +251,7 @@ def ARC(prices, timeperiod=14):
     return arc
 
 
+@jit
 def ASI(prices, timeperiod=14):
     """
     7.  ASI累计振动升降指标
@@ -256,36 +281,59 @@ def ASI(prices, timeperiod=14):
 
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
-    df_price['close1'] = df_price['close'].shift(1)
-    df_price['low1'] = df_price['low'].shift(1)
-    df_price['open1'] = df_price['open'].shift(1)
+    close1 = df_price['close'].shift(1).values
+    low1 = df_price['low'].shift(1).values
+    open1 = df_price['open'].shift(1).values
+    high = df_price['high'].values
+    low = df_price['low'].values
+    close = df_price['close'].values
+    open = df_price['open'].values
 
-    df_price['A'] = np.abs(df_price['high'] - df_price['close1'])
-    df_price['B'] = np.abs(df_price['low'] - df_price['close1'])
-    df_price['C'] = np.abs(df_price['high'] - df_price['low1'])
-    df_price['D'] = np.abs(df_price['close1'] - df_price['open1'])
+    A = np.abs(high - close1)
+    B = np.abs(low - close1)
+    C = np.abs(high - low1)
+    D = np.abs(close1 - open1)
 
-    df_price['E'] = df_price['close'] - df_price['close1']
-    df_price['F'] = df_price['close'] - df_price['open']
-    df_price['G'] = df_price['close1'] - df_price['open1']
+    E = close - close1
+    F = close - open
+    G = close1 - open1
 
-    df_price['X'] = df_price['E'] + 0.5 * df_price['F'] + df_price['G']
-    df_price['K'] = df_price.apply(
-        lambda row: max(row['A'], row['B']), axis=1)
+    X = E + 0.5 * F + G
 
-    def _R(row):
-        if row['A'] > row['B'] and row['A'] > row['C']:
-            return row['A'] + 0.5 * row['B'] + 0.25 * row['D']
-        if row['B'] > row['A'] and row['B'] > row['C']:
-            return row['B'] + 0.5 * row['A'] + 0.25 * row['D']
+    K = np.zeros_like(open1)
+    for idx in xrange(len(K)):
+        K[idx] = np.max((A[idx], B[idx]))
+    # K = df_price.apply(
+    #     lambda row: max(row['A'], row['B']), axis=1)
+
+    R = np.zeros_like(open1)
+    for idx in xrange(len(R)):
+        if A[idx] > B[idx] and A[idx] > C[idx]:
+            R[idx] = A[idx] + 0.5 * B[idx] + 0.25 * D[idx]
+        elif B[idx] > A[idx] and B[idx] > C[idx]:
+            R[idx] = B[idx] + 0.5 * A[idx] + 0.25 * D[idx]
         else:
-            return row['C'] + 0.25 * row['D']
+            R[idx] = C[idx] + 0.25 * D[idx]
 
-    df_price['R'] = df_price.apply(_R, axis=1)
-    df_price['SI'] = 16 * df_price['X'] / df_price['R'] * df_price['K']
 
-    asi = pd.rolling_sum(df_price['SI'], timeperiod)
-    return asi
+
+    # def _R(row):
+    #     if row['A'] > row['B'] and row['A'] > row['C']:
+    #         return row['A'] + 0.5 * row['B'] + 0.25 * row['D']
+    #     if row['B'] > row['A'] and row['B'] > row['C']:
+    #         return row['B'] + 0.5 * row['A'] + 0.25 * row['D']
+    #     else:
+    #         return row['C'] + 0.25 * row['D']
+    #
+    # df_price['R'] = df_price.apply(_R, axis=1)
+
+    si = 16 * X / R * K
+
+    asi = ta.SUM(si, timeperiod)
+    # df_price['SI'] = 16 * df_price['X'] / df_price['R'] * df_price['K']
+
+    # asi = pd.rolling_sum(df_price['SI'], timeperiod)
+    return pd.Series(asi, index=df_price.index)
 
 
 def BBI(prices, timeperiod1=3, timeperiod2=6, timeperiod3=12, timeperiod4=24):
@@ -347,6 +395,7 @@ def BIAS(prices, timeperiod=14):
     return bias
 
 
+# @jit
 def CMF(prices, timeperiod=20):
     """
     12. CMF蔡金货币流量指标（Chaikin Money Flow，CMF）
@@ -366,65 +415,35 @@ def CMF(prices, timeperiod=20):
 
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
-    df_price['high_close'] = df_price['high'] - df_price['close']
-    df_price['CLV'] = df_price.apply(
-        lambda row: ((row['close'] - row['low']) - row['high_close']) / row['high_close'] * row['volume'] if not np.isclose(row['high_close'], 0) else row[
-            'volume'], axis=1
-    )
+    close = df_price['close'].values
+    high = df_price['high'].values
+    low = df_price['low'].values
+    volume = df_price['volume'].values
+
+    # clv = np.zeros_like(low, dtype=float)
+    # for idx in xrange(len(clv)):
+    #     if is_close(high[idx] - close[idx], 0):
+    #         clv[idx] = volume[idx]
+    #     else:
+    #         clv[idx] = ((close[idx] - low[idx]) - (high[idx] - close[idx])) / (high[idx] - close[idx]) * volume[idx]
+
+    clv = ((close - low) - (high - close)) / (high - close) * volume
+    inf_idx = np.isinf(clv)
+    clv[inf_idx] = volume[inf_idx]
+
+    # df_price['high_close'] = df_price['high'] - df_price['close']
+
+    # df_price['CLV'] = df_price.apply(
+    #     lambda row: ((row['close'] - row['low']) - row['high_close']) / row['high_close'] * row['volume'] if not np.is_close(row['high_close'], 0) else row[
+    #         'volume'], axis=1
+    # )
     SUM = pd.rolling_sum
-    cmf = SUM(df_price['CLV'], timeperiod) / \
-          SUM(df_price['volume'], timeperiod)
-    return cmf
+    cmf = SUM(clv, timeperiod) / SUM(volume, timeperiod)
+    # cmf = SUM(df_price['CLV'], timeperiod) / SUM(df_price['volume'], timeperiod)
+    return pd.Series(cmf, index=df_price.index)
 
 
-# def CHV(prices, timeperiod=10):
-#     """
-#     说明：蔡金波动性指标-- 计算最高价和最低价之间的价差。
-#     以在最大和最小之间的振幅为基础蔡金波动指标来断定波动价值。
-#     与真实范围平均数不同, 蔡金波动制表在账户中没有间隔。
-#
-#     根据Chaikin的诠释，指标价值的增长直接关系到短的时间空隙，
-#     就是说价格接近他们的最小值(像当惊慌卖出)，在长时间里指标波动减缓，
-#     表明价格处于繁忙状态（例如，条件成熟牛市的状态）。
-#     我们建议使用 移动平均数 and 包络线指标 作为确认蔡金波动指标的信号。
-#     当市场价格从新最高点和市场转换滚移时，指标读出显示的是最高值。
-#     市场一个单位的波动性低。从侧面移动进入（从市场单位）不伴随波动性减少的信号。
-#     波动性独自增长接近前一个最高价格水平。
-#     蔡金波动性指标继续增长直至到达新价格顶端。
-#     波动性迅速降低意味着缓慢下降并且可能反向滚动。
-#     计算方法：http://ta.mql4.com/cn/indicators/oscillators/chaikin_volatility
-#     H-L (i) = HIGH (i) - LOW (i)
-#     H-L (i - 10) = HIGH (i - 10) - LOW (i - 10)
-#     CHV = (EMA (H-L (i), 10) - EMA (H-L (i - 10), 10)) /
-#     EMA (H-L (i - 10), 10) * 100
-#
-#     位置：
-#     HIGH (i) - 前一个柱的最高价格；
-#     LOW (i) - 前一个柱的最低价格；
-#     HIGH (i - 10) - 从当前柱十个仓位柱的最高价格；
-#     LOW (i - 10)- 从当前柱十个仓位柱的最低价格；
-#     H-L (i) - 当前柱中最高价和最低价之间的差距；
-#     H-L (i - 10) - 前十个柱最高价和最低价之间的差距；
-#     EMA - 期待移动平均数。
-#     :param prices:
-#     :param timeperiod:
-#     :return:
-#     """
-#     #
-#     assert prices is not None
-#     _assert_greater_or_equal(len(prices), timeperiod)
-#     assert isinstance(timeperiod, int)
-#
-#     df_price = prices.copy()
-# df_price = df_price.sort_index(ascending=True)
-#     df_price['ewma-hl'] = ta.EMA((df_price['high'] - df_price['low']).values.astype(float),
-#                                  timeperiod=timeperiod)
-#     hl_n = df_price['ewma-hl'].shift(timeperiod)
-#     chv = (df_price['ewma-hl'] - hl_n) / hl_n * 100
-#
-#     return chv
-
-@jit
+# @jit
 def CVI(prices, timeperiod=14):
     """
     说明：蔡金波动性指标-- 计算最高价和最低价之间的价差。
@@ -445,76 +464,36 @@ def CVI(prices, timeperiod=14):
     _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
+    # df_price = prices.copy()
+    df_price = prices.sort_index(ascending=True)
     EMA = ta.EMA
 
     high_low = (df_price['high'] - df_price['low']).values.astype(float)
     ema_high_low_N = EMA(high_low, timeperiod=timeperiod)
 
-    ema_high_low_NN = pd.Series(ema_high_low_N).shift(timeperiod).values
+    ema_high_low_NN = inp.shift(ema_high_low_N, shift=timeperiod, order=0, cval=np.nan)
     # df_price['ema_high_low'] = ema_high_low
     # df_price['ema_high_low_N'] = df_price['ema_high_low'].shift(timeperiod)
 
-    cvi = np.zeros_like(high_low, dtype=float)
+    # cvi = np.zeros_like(high_low, dtype=float)
+    # for idx in xrange(len(cvi)):
+    #     cvi[idx] = (ema_high_low_N[idx] - ema_high_low_NN[idx]) / ema_high_low_N[idx] * 100 if not is_close(
+    #         ema_high_low_N[idx], 0) else 0
 
-    for idx in xrange(len(cvi)):
-        cvi[idx] = (ema_high_low_N[idx] - ema_high_low_NN[idx]) / ema_high_low_N[idx] * 100 if not np.isclose(
-            ema_high_low_N[idx], 0) else 0
-
+    cvi = (ema_high_low_N - ema_high_low_NN) / ema_high_low_N * 100.0
+    inf_idx = np.isinf(cvi)
+    cvi[inf_idx] = 0
     # def func(row):
-    #     return (row['ema_high_low'] - row['ema_high_low_N']) / row['ema_high_low'] * 100 if not np.isclose(row['ema_high_low'], 0) else 0
+    #     return (row['ema_high_low'] - row['ema_high_low_N']) / row['ema_high_low'] * 100 if not np.is_close(row['ema_high_low'], 0) else 0
     #
     # df_price['CVI'] = df_price.apply(
     #     func, axis=1
     # )
 
-    return cvi
+    return pd.Series(cvi, index=df_price.index)
 
 
-# def CMO(prices, timeperiod=20):
-#     """
-#     15.   CMO钱德动量摆动指标(Chande Momentum Oscillator, CMO)
-#     说明：钱德动量摆动指标是由图莎尔·钱德发明的，与其他动量指标摆动指标如相对强弱指标（RSI）
-#     和随机指标（KDJ）不同，钱德动量指标在计算公式的分子中采用上涨日和下跌日的数据。
-#     当动量摆动超过+50时，我们认为证券处于超买状态，当动量摆动低于-50时，我们认为证券处于超卖状态。
-#     一些技术投资者还在此摆动指标的基础上添加了九个周期的移动平均线，以作为信号线。
-#     当摆动线在信号线上方时，是多头的信号；当摆动先位于信号线下方时，是空头的信号。
-#
-#     计算方法：默认N=20
-#     CZ1 = IF(CLOSE-CLOSE[1]>0,CLOSE-CLOSE[1],0)
-#     CZ2 = IF(CLOSE-CLOSE[1]<0,ABS(CLOSE-CLOSE[1],0)
-#     SU(N) = SUM(CZ1,N)
-#     SD(N) = SUM(CZ2,N)
-#     CMO = (SU(N)-SD(N))/(SU(N)+SD(N))*100
-#
-#     :param prices:
-#     :param timeperiod:
-#     :return:
-#     """
-#     assert prices is not None
-#     _assert_greater_or_equal(len(prices), timeperiod)
-#     assert isinstance(timeperiod, int)
-#
-#     df_price = prices.copy()
-# df_price = df_price.sort_index(ascending=True)
-#
-#     df_price['close1'] = df_price['close'].shift(1)
-#
-#     cz1 = df_price.apply(
-#         lambda row: row['close'] - row['close1'] if row['close'] > row['close1'] else 0, axis=1
-#     )
-#     cz2 = df_price.apply(
-#         lambda row: abs(row['close'] - row['close1']) if row['close'] < row['close1'] else 0, axis=1
-#     )
-#
-#     SUM = pd.rolling_sum
-#     su = SUM(cz1, timeperiod)
-#     sd = SUM(cz2, timeperiod)
-#     cmo = (su-sd)/(su+sd) * 100
-#     return cmo
-
-
+# @autojit 不要用jit
 def CR(prices, timeperiod=14):
     """
     说明：CR指标以上一个计算周期（如N日）的中间价比较当前周期（如日）的最高价、最低价，
@@ -534,20 +513,42 @@ def CR(prices, timeperiod=14):
     _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
+    # df_price = prices.copy()
+    df_price = prices.sort_index(ascending=True)
 
-    df_price['mid'] = (
-                          df_price['high'] + df_price['low'] + df_price['close']) / 3
-    df_price['mid1'] = df_price['mid'].shift(1)
-    df_price['max_high_mid1'] = df_price.apply(
-        lambda row: max(0, row['high'] - row['mid1']), axis=1)
-    df_price['max_mid1_low'] = df_price.apply(
-        lambda row: max(0, row['mid1'] - row['low']), axis=1)
-    SUM = pd.rolling_sum
-    cr = SUM(df_price['max_high_mid1'], timeperiod) / \
-         SUM(df_price['max_mid1_low'], timeperiod) * 100
-    return cr
+    high, low, close = df_price[['high', 'low', 'close']].T.values
+
+    mid = (high + low + close) / 3.0
+    # df_price['mid'] = (df_price['high'] + df_price['low'] + df_price['close']) / 3
+
+
+
+    mid1 = inp.shift(mid, 1, order=0, cval=np.nan)
+    # df_price['mid1'] = df_price['mid'].shift(1)
+
+    # df_price['max_high_mid1'] = df_price.apply(
+    #     lambda row: max(0, row['high'] - row['mid1']), axis=1)
+
+    high_mid1 = high - mid1
+
+    max_high_mid1 = np.max(np.column_stack((high_mid1, np.zeros(shape=high_mid1.shape))), axis=1)
+
+
+    # df_price['max_high_mid1'] = df_price[['']]
+
+    # df_price['max_mid1_low'] = df_price.apply(
+    #     lambda row: max(0, row['mid1'] - row['low']), axis=1)
+
+    # mid1_low = (df_price['mid1'] - df_price['low']).values
+    mid1_low = mid1 - low
+    max_mid1_low = np.max(np.column_stack((mid1_low, np.zeros(shape=mid1_low.shape))), axis=1)
+
+    # SUM = pd.rolling_sum
+    SUM = ta.SUM
+    # cr = SUM(df_price['max_high_mid1'], timeperiod) / \
+    #      SUM(df_price['max_mid1_low'], timeperiod) * 100
+    cr = SUM(max_high_mid1, timeperiod) / SUM(max_mid1_low, timeperiod) * 100
+    return pd.Series(cr, index=df_price.index)
 
 
 def DBCD(prices, timeperiod1=14, timeperiod2=14, timeperiod3=14):
@@ -603,29 +604,58 @@ def DDI(prices, timeperiod=20):
     _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
-    df_price['high1'] = df_price['high'].shift(1)
-    df_price['low1'] = df_price['low'].shift(1)
+    # df_price = prices.copy()
 
-    df_price['DMZ'] = df_price.apply(
-        lambda row: 0 if row['high'] + row['low'] <= row['high1'] + row['low1'] else max(abs(row['high'] - row['high1']), abs(row['low'] - row['low1'])), axis=1
-    )
-    df_price['DMF'] = df_price.apply(
-        lambda row: 0 if row['high'] + row['low'] > row['high1'] + row['low1'] else max(abs(row['high'] - row['high1']), abs(row['low'] - row['low1'])), axis=1
-    )
-    SUM = pd.rolling_sum
-    df_price['SUM_DMZ'] = SUM(df_price['DMZ'], timeperiod)
-    df_price['SUM_DMF'] = SUM(df_price['DMF'], timeperiod)
-    df_price['SUM_DMZ_DMF'] = df_price['SUM_DMZ'] + df_price['SUM_DMF']
-    df_price['DIZ'] = df_price.apply(
-        lambda row: row['SUM_DMZ'] / row['SUM_DMZ_DMF'] if not np.isclose(row['SUM_DMZ_DMF'], 0) else 0, axis=1
-    )
-    df_price['DIF'] = df_price.apply(
-        lambda row: row['SUM_DMF'] / row['SUM_DMZ_DMF'] if not np.isclose(row['SUM_DMZ_DMF'], 0) else 0, axis=1
-    )
+    df_price = prices.sort_index(ascending=True)
+    high, low = df_price[['high', 'low']].T.values
+    high1 = inp.shift(high, 1, cval=np.nan)
+    low1 = inp.shift(low, 1, cval=np.nan)
 
-    ddi = (df_price['DIZ'] - df_price['DIF']) * 100
+    abs_high_high1 = np.abs(high - high1)
+    abs_low_low1 = np.abs(low - low1)
+    val_max = np.max(np.column_stack((abs_high_high1, abs_low_low1)), axis=1)
+
+    # DMZ
+    cond1 = high + low <= high1 + low1
+    dmz = val_max.copy()
+    dmz[cond1] = 0
+
+    # DMF
+    dmf = val_max
+    dmf[~cond1] = 0
+
+    SUM = ta.SUM
+    sum_dmz = SUM(dmz, timeperiod)
+    sum_dmf = SUM(dmf, timeperiod)
+    sum_dmz_dmf = sum_dmz + sum_dmf
+    diz = sum_dmz / sum_dmz_dmf
+    dif = sum_dmf / sum_dmz_dmf
+
+    ddi = pd.Series((diz - dif) * 100, index=df_price.index)
+
+    # df_price['high1'] = df_price['high'].shift(1)
+    # df_price['low1'] = df_price['low'].shift(1)
+    #
+    # df_price['DMZ'] = df_price.apply(
+    #     lambda row: 0 if row['high'] + row['low'] <= row['high1'] + row['low1'] else max(abs(row['high'] - row['high1']), abs(row['low'] - row['low1'])),
+    # axis=1
+    # )
+    # df_price['DMF'] = df_price.apply(
+    #     lambda row: 0 if row['high'] + row['low'] > row['high1'] + row['low1'] else max(abs(row['high'] - row['high1']), abs(row['low'] - row['low1'])),
+    # axis=1
+    # )
+    # SUM = pd.rolling_sum
+    # df_price['SUM_DMZ'] = SUM(df_price['DMZ'], timeperiod)
+    # df_price['SUM_DMF'] = SUM(df_price['DMF'], timeperiod)
+    # df_price['SUM_DMZ_DMF'] = df_price['SUM_DMZ'] + df_price['SUM_DMF']
+    # df_price['DIZ'] = df_price.apply(
+    #     lambda row: row['SUM_DMZ'] / row['SUM_DMZ_DMF'] if not np.isclose(row['SUM_DMZ_DMF'], 0) else 0, axis=1
+    # )
+    # df_price['DIF'] = df_price.apply(
+    #     lambda row: row['SUM_DMF'] / row['SUM_DMZ_DMF'] if not np.isclose(row['SUM_DMZ_DMF'], 0) else 0, axis=1
+    # )
+
+    # ddi = (df_price['DIZ'] - df_price['DIF']) * 100
     return ddi
 
 
@@ -713,6 +743,7 @@ def EMV(prices):
     return emv
 
 
+# @jit
 def IMI(prices, timeperiod=14):
     """
     说明：
@@ -732,21 +763,40 @@ def IMI(prices, timeperiod=14):
     _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
-    df_price['U'] = df_price.apply(
-        lambda row: row['close'] - row['open'] if row['close'] > row['open'] else 0, axis=1
-    )
-    df_price['D'] = df_price.apply(
-        lambda row: row['open'] - row['close'] if row['close'] <= row['open'] else 0, axis=1
-    )
-    df_price['USUM'] = pd.rolling_sum(df_price['U'], timeperiod)
-    df_price['DSUM'] = pd.rolling_sum(df_price['D'], timeperiod)
-    df_price['IMI'] = df_price.apply(
-        lambda row: row['USUM'] / (row['USUM'] + row['DSUM']) * 100 if not np.isclose(row['USUM'] + row['DSUM'], 0) else 100, axis=1
-    )
-    # imi = df_price['USUM'] / (df_price['USUM'] + df_price['DSUM']) * 100
-    return df_price['IMI']
+    # df_price = prices.copy()
+    df_price = prices.sort_index(ascending=True)
+
+    open, close = df_price[['open', 'close']].T.values
+
+    cond = close > open
+
+    u = np.zeros(shape=open.shape)
+    d = u.copy()
+    u[cond] = (close - open)[cond]
+    d[~cond] = (open - close)[~cond]
+
+    SUM = ta.SUM
+    usum = SUM(u, timeperiod)
+    dsum = SUM(d, timeperiod)
+
+    rmi = usum / (usum + dsum) * 100
+
+    return pd.Series(rmi, index=df_price.index)
+
+
+    # df_price['U'] = df_price.apply(
+    #     lambda row: row['close'] - row['open'] if row['close'] > row['open'] else 0, axis=1
+    # )
+    # df_price['D'] = df_price.apply(
+    #     lambda row: row['open'] - row['close'] if row['close'] <= row['open'] else 0, axis=1
+    # )
+    # df_price['USUM'] = pd.rolling_sum(df_price['U'], timeperiod)
+    # df_price['DSUM'] = pd.rolling_sum(df_price['D'], timeperiod)
+    # df_price['IMI'] = df_price.apply(
+    #     lambda row: row['USUM'] / (row['USUM'] + row['DSUM']) * 100 if not np.isclose(row['USUM'] + row['DSUM'], 0) else 100, axis=1
+    # )
+    # # imi = df_price['USUM'] / (df_price['USUM'] + df_price['DSUM']) * 100
+    # return df_price['IMI']
 
 
 def KVO(prices, timeperiod1=34, timeperiod2=55, trigger_line=13):
@@ -793,20 +843,37 @@ def KVO(prices, timeperiod1=34, timeperiod2=55, trigger_line=13):
     assert isinstance(timeperiod1, int)
     assert isinstance(timeperiod2, int)
 
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
-    df_price['typical_price'] = (
-                                    df_price['high'] + df_price['low'] + df_price['close']) / 3
-    df_price['typical_price1'] = df_price['typical_price'].shift(1)
 
-    df_price['SV'] = df_price.apply(
-        lambda row: row['volume'] if row['typical_price'] >= row['typical_price1'] else -row['volume'], axis=1
-    )
-    EWA = ta.EMA
-    df_price['kvo'] = EWA(
-        df_price['SV'].values.astype(float), timeperiod1) - EWA(df_price['SV'].values.astype(float), timeperiod2)
-    df_price['trigger_line'] = EWA(df_price['kvo'].values.astype(float), trigger_line)
-    return df_price['trigger_line']
+
+    # df_price = prices.copy()
+    df_price = prices.sort_index(ascending=True)
+
+    high, low, close = df_price[['high', 'low', 'close']].T.values
+    typical_price = (high + low + close) / 3.0
+    typical_price1 = inp.shift(typical_price, 1, order=0, cval=np.nan)
+    cond = typical_price > typical_price1
+    sv = df_price['volume'].values.astype(float)
+    sv[~cond] = - df_price['volume'].values[~cond]
+
+    EMA = ta.EMA
+    kvo = EMA(sv, timeperiod1) - EMA(sv, timeperiod2)
+
+    trig = EMA(kvo, trigger_line)
+
+    return pd.Series(trig, index=df_price.index)
+
+    # df_price['typical_price'] = (
+    #                                 df_price['high'] + df_price['low'] + df_price['close']) / 3
+    # df_price['typical_price1'] = df_price['typical_price'].shift(1)
+    #
+    # df_price['SV'] = df_price.apply(
+    #     lambda row: row['volume'] if row['typical_price'] >= row['typical_price1'] else -row['volume'], axis=1
+    # )
+    # EWA = ta.EMA
+    # df_price['kvo'] = EWA(
+    #     df_price['SV'].values.astype(float), timeperiod1) - EWA(df_price['SV'].values.astype(float), timeperiod2)
+    # df_price['trigger_line'] = EWA(df_price['kvo'].values.astype(float), trigger_line)
+    # return df_price['trigger_line']
 
 
 def MI(prices, timeperiod=9):
@@ -1034,112 +1101,73 @@ def RI(prices, timeperiod1=20, timeperiod2=5):
     assert isinstance(timeperiod1, int)
     assert isinstance(timeperiod2, int)
 
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
-    df_price['close1'] = df_price['close'].shift(1)
+    # df_price = prices.copy()
+    df_price = prices.sort_index(ascending=True)
 
-    def func1(row):
-        return max(row['high'] - row['low'], abs(row['close1'] - row['high']), abs(row['close1'] - row['low']))
+    high, low, close = df_price[['high', 'low', 'close']].T.values
 
-    df_price['TR'] = df_price.apply(
-        func1, axis=1
-    )
+    close1 = inp.shift(close, 1, cval=np.nan)
 
-    def func2(row):
-        return row['TR'] / (row['close'] - row['close1']) if row['close'] > row['close1'] else row['TR']
+    tr = TR(df_price).values
 
-    df_price['W'] = df_price.apply(
-        func2, axis=1
-    )
+    w = tr.copy()
+    cond1 = close > close1
+    w[cond1] = tr[cond1] / (close[cond1] - close1[cond1])
 
-    MAX = pd.rolling_max
-    df_price['MAX_W_N1'] = MAX(df_price['W'], timeperiod1)
-    MIN = pd.rolling_min
-    df_price['MIN_W_N1'] = MIN(df_price['W'], timeperiod1)
+    MIN = ta.MIN
+    MAX = ta.MAX
 
-    def func3(row):
-        return (row['W'] - row['MIN_W_N1']) / (row['MAX_W_N1'] - row['MIN_W_N1']) * 100 if row['MAX_W_N1'] > row['MIN_W_N1'] else (row['W'] - row[
-            'MIN_W_N1']) * 100
+    min_w_n1 = MIN(w, timeperiod1)
+    max_w_n1 = MAX(w, timeperiod1)
 
-    df_price['SR_N1'] = df_price.apply(
-        func3, axis=1
-    )
+    # sr
+    cond2 = max_w_n1 > min_w_n1
+
+    sr = (w - min_w_n1) * 100.0
+    sr[cond2] = (w - min_w_n1)[cond2] / (max_w_n1[cond2] - min_w_n1[cond2]) * 100
+
+    # ri
     EMA = ta.EMA
-    df_price['RI'] = EMA(df_price['SR_N1'].values.astype(float), timeperiod2)
-    return df_price['RI']
+    ri = EMA(sr, timeperiod2)
+
+    return pd.Series(ri, index=df_price.index)
 
 
-# def RMI(prices, timeperiod1=5, timeperiod2=14):
-#     """
-#     37. RMI相对动量指标(Relative Momentum Indicator, RMI)
-#     说明：相对动量指标是相对强弱指标加上动量成分后的变形，相对动量指标从收盘价相对于n期前收盘价
-#     计算上涨交易日和下跌交易日。
-#
-#     计算方法: 默认值N1=5, N2=14
-#     UM(N1) = IF(CLOSE-CLOSE[N1]>0,CLOSE-CLOSE[N1],0)
-#     DM(N1) = IF(CLOSE-CLOSE[N1]<0,CLOSE[N1]-CLOSE,0)
-#     UA(N2) = (UA[1]*(N2-1)+UM)/N2
-#     DA(N2) = (DA[1]*(N2-1)+DM)/N2
-#     RMI = 100*(UA/(UA+DA))
-#
-#     UA初始值 = SMA(UM,N)
-#     DA初始值 = SMA(DM,N)
-#
-#     :param prices:
-#     :param N1: N1
-#     :param N2: N2
-#     :return:
-#     """
-#     assert prices is not None
-#     timeperiod = timeperiod1 + timeperiod2
-#     _assert_greater_or_equal(len(prices), timeperiod)
-#     assert isinstance(timeperiod1, int)
-#     assert isinstance(timeperiod2, int)
-#
-#     df_price = prices.copy()
-#     df_price = df_price.sort_index(ascending=True)
-#
-#     N1 = timeperiod1
-#     N2 = timeperiod2
-#     df_price['close_n1'] = df_price['close'].shift(N1)
-#
-#     def func1(row):
-#         return row['close'] - row['close_n1'] if row['close'] > row['close_n1'] else 0
-#
-#     um_n1 = df_price.apply(func1, axis=1)
-#
-#     def func2(row):
-#         return row['close_n1'] - row['close'] if row['close'] < row['close_n1'] else 0
-#
-#     dm_n1 = df_price.apply(
-#         func2, axis=1)
-#     ua = np.zeros_like(df_price['close'])
-#     da = np.zeros_like(df_price['close'])
-#
-#     SMA = ta.SMA
-#
-#     ua[:(N1 + N2)] = np.nan
-#     ua[(N1 + N2)] = SMA(um_n1.values.astype(float), N2)[(N1 + N2)]
-#
-#     da[:(N1 + N2)] = np.nan
-#     da[(N1 + N2)] = SMA(dm_n1.values.astype(float), N2)[(N1 + N2)]
-#
-#     for ind in range((N1 + N2 + 1), len(df_price)):
-#         ua[ind] = (ua[ind - 1] * (N2 - 1) + um_n1[ind]) / N2
-#         da[ind] = (da[ind - 1] * (N2 - 1) + dm_n1[ind]) / N2
-#
-#     df_price['UA'] = ua
-#     df_price['DA'] = da
-#     def func3(row):
-#         return row['UA'] / (row['UA'] + row['DA']) * 100 if not np.isclose(row['UA'] + row['DA'], 0) else 50
-#     df_price['RMI'] = df_price.apply(
-#         func3, axis=1
-#     )
-#     # df_price['RMI'] = ua /(ua + da) * 100
-#
-#     return df_price['RMI']
 
-@jit
+    # df_price['close1'] = df_price['close'].shift(1)
+    #
+    # def func1(row):
+    #     return max(row['high'] - row['low'], abs(row['close1'] - row['high']), abs(row['close1'] - row['low']))
+    #
+    # df_price['TR'] = df_price.apply(
+    #     func1, axis=1
+    # )
+    #
+    # def func2(row):
+    #     return row['TR'] / (row['close'] - row['close1']) if row['close'] > row['close1'] else row['TR']
+    #
+    # df_price['W'] = df_price.apply(
+    #     func2, axis=1
+    # )
+
+    # MAX = pd.rolling_max
+    # df_price['MAX_W_N1'] = MAX(df_price['W'], timeperiod1)
+    # MIN = pd.rolling_min
+    # df_price['MIN_W_N1'] = MIN(df_price['W'], timeperiod1)
+    #
+    # def func3(row):
+    #     return (row['W'] - row['MIN_W_N1']) / (row['MAX_W_N1'] - row['MIN_W_N1']) * 100 if row['MAX_W_N1'] > row['MIN_W_N1'] else (row['W'] - row[
+    #         'MIN_W_N1']) * 100
+    #
+    # df_price['SR_N1'] = df_price.apply(
+    #     func3, axis=1
+    # )
+    # EMA = ta.EMA
+    # df_price['RI'] = EMA(df_price['SR_N1'].values.astype(float), timeperiod2)
+    # return df_price['RI']
+
+
+# @jit
 def RMI(prices, timeperiod1=5, timeperiod2=14):
     """
     37. RMI相对动量指标(Relative Momentum Indicator, RMI)
@@ -1236,10 +1264,14 @@ def RVI(prices, timeperiod1=10, timeperiod2=14):
     _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod1, int)
     assert isinstance(timeperiod2, int)
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
+    # df_price = prices.copy()
+    df_price = prices.sort_index(ascending=True)
     N1 = timeperiod1
     N2 = timeperiod2
+
+
+
+
 
     def _UM(price, N1):
         df_price[price + str(1)] = df_price[price].shift(1)
@@ -1381,22 +1413,34 @@ def SRSI(prices, timeperiod1=14, timeperiod2=14):
     assert isinstance(timeperiod1, int)
     assert isinstance(timeperiod2, int)
 
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
+    # df_price = prices.copy()
+    df_price = prices.sort_index(ascending=True)
     RSI = Function("RSI")
-    MAX = pd.rolling_max
-    MIN = pd.rolling_min
-    df_price['RSI_N'] = RSI(df_price, timeperiod1)
-    df_price['MAX_RSI_N_N1'] = MAX(df_price['RSI_N'], timeperiod2)
-    df_price['MIN_RSI_N_N1'] = MIN(df_price['RSI_N'], timeperiod2)
-    df_price['MAX_MINUS_MIN_RSI'] = df_price['MAX_RSI_N_N1'] - df_price['MIN_RSI_N_N1']
+    MAX = ta.MAX
+    MIN = ta.MIN
 
-    def func(row):
-        return (row['RSI_N'] - row['MAX_RSI_N_N1']) / row['MAX_MINUS_MIN_RSI'] * 100 if not np.isclose(row['MAX_MINUS_MIN_RSI'], 0) else 0
+    rsi_n = RSI(df_price, timeperiod1).values
 
-    df_price['SRSI'] = df_price.apply(
-        func, axis=1)
-    return df_price['SRSI']
+    srsi = (rsi_n - MAX(rsi_n, timeperiod2)) / (MAX(rsi_n, timeperiod2) - MIN(rsi_n, timeperiod2)) * 100
+
+    inf_index = np.isinf(srsi)
+    srsi[inf_index] = 0
+
+    return pd.Series(srsi, index=df_price.index)
+    # RSI = Function("RSI")
+    # MAX = pd.rolling_max
+    # MIN = pd.rolling_min
+    # df_price['RSI_N'] = RSI(df_price, timeperiod1)
+    # df_price['MAX_RSI_N_N1'] = MAX(df_price['RSI_N'], timeperiod2)
+    # df_price['MIN_RSI_N_N1'] = MIN(df_price['RSI_N'], timeperiod2)
+    # df_price['MAX_MINUS_MIN_RSI'] = df_price['MAX_RSI_N_N1'] - df_price['MIN_RSI_N_N1']
+    #
+    # def func(row):
+    #     return (row['RSI_N'] - row['MAX_RSI_N_N1']) / row['MAX_MINUS_MIN_RSI'] * 100 if not np.isclose(row['MAX_MINUS_MIN_RSI'], 0) else 0
+    #
+    # df_price['SRSI'] = df_price.apply(
+    #     func, axis=1)
+    # return df_price['SRSI']
 
 
 def TS(prices, timeperiod=20):
@@ -1413,15 +1457,23 @@ def TS(prices, timeperiod=20):
     _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
-    SUM = pd.rolling_sum
-    df_price['close1'] = df_price['close'].shift(1)
-    df_price['close_close1'] = df_price.apply(
-        lambda row: 1 if row['close'] >= row['close1'] else -1, axis=1
-    )
-    ts = SUM(df_price['close_close1'], timeperiod)
-    return ts
+    # df_price = prices.copy()
+    df_price = prices.sort_index(ascending=True)
+    close = df_price['close'].values.astype(float)
+    close1 = inp.shift(close, 1, order=0, cval=np.nan)
+    SUM = ta.SUM
+    ts = np.ones(shape=close1.shape, dtype=float)
+    cond = close >= close1
+    ts[~cond] = -1.0
+    return pd.Series(SUM(ts, timeperiod), index=df_price.index)
+
+    # SUM = pd.rolling_sum
+    # df_price['close1'] = df_price['close'].shift(1)
+    # df_price['close_close1'] = df_price.apply(
+    #     lambda row: 1 if row['close'] >= row['close1'] else -1, axis=1
+    # )
+    # ts = SUM(df_price['close_close1'], timeperiod)
+    # return ts
 
 
 def TMA(prices, timeperiod=10, price='close'):
@@ -1473,13 +1525,20 @@ def TR(prices):
     _assert_greater_or_equal(len(prices), 1)
     # assert isinstance(staticmethod, int)
     # assert price in ('open', 'close', 'high', 'low')
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
-    df_price['close1'] = df_price['close'].shift(1)
-    df_price['TR'] = df_price.apply(
-        lambda row: max(row['high'] - row['low'], abs(row['high'] - row['close1']), abs(row['low'] - row['close1'])), axis=1
-    )
-    return df_price['TR']
+    # df_price = prices.copy()
+    df_price = prices.sort_index(ascending=True)
+    high, low, close = df_price[['high', 'low', 'close']].T.values
+    close1 = inp.shift(close, 1, cval=np.nan)
+
+    tr = np.max(np.column_stack((high - low, np.abs(high - close1), np.abs(low - close1))), axis=1)
+
+    return pd.Series(tr, index=df_price.index)
+
+    # df_price['close1'] = df_price['close'].shift(1)
+    # df_price['TR'] = df_price.apply(
+    #     lambda row: max(row['high'] - row['low'], abs(row['high'] - row['close1']), abs(row['low'] - row['close1'])), axis=1
+    # )
+    # return df_price['TR']
 
 
 def VIDYA(prices, timeperiod=20):
@@ -1541,20 +1600,31 @@ def TSI(prices, timeperiod1=25, timeperiod2=13):
     assert isinstance(timeperiod2, int)
 
     df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
+    df_price = prices.sort_index(ascending=True)
 
-    df_price['mom'] = df_price['close'] - df_price['close'].shift(1)
+    close = df_price['close'].values.astype(float)
 
+    mom = close = inp.shift(close, 1, cval=np.nan)
     EMA = ta.EMA
-    df_price['EMA_EMA_MOM'] = EMA(EMA(df_price['mom'].values.astype(float), timeperiod1), timeperiod2)
-    df_price['EMA_EMA_ABS_MOM'] = EMA(EMA(df_price['mom'].abs().values.astype(float), timeperiod1), timeperiod2)
-    df_price['TSI'] = df_price.apply(
-        lambda row: row['EMA_EMA_MOM'] / row['EMA_EMA_ABS_MOM'] * 100 if not np.isclose(row['EMA_EMA_ABS_MOM'], 0) else 0, axis=1
-    )
-    # tsi = EMA(EMA(df_price['mom'].values.astype(float), timeperiod1), timeperiod2) / \
-    #     EMA(EMA(df_price['mom'].abs().values.astype(float), timeperiod1), timeperiod2) * 100
-    # df_price['tsi'] = tsi
-    return df_price['TSI']
+
+    tsi = EMA(EMA(mom, timeperiod1), timeperiod2) / EMA(EMA(np.abs(mom), timeperiod1), timeperiod2) * 100
+    inf_idx = np.isinf(tsi)
+    tsi[inf_idx] = 0.0
+    return pd.Series(tsi, index=df_price.index)
+
+
+    # df_price['mom'] = df_price['close'] - df_price['close'].shift(1)
+    #
+    # EMA = ta.EMA
+    # df_price['EMA_EMA_MOM'] = EMA(EMA(df_price['mom'].values.astype(float), timeperiod1), timeperiod2)
+    # df_price['EMA_EMA_ABS_MOM'] = EMA(EMA(df_price['mom'].abs().values.astype(float), timeperiod1), timeperiod2)
+    # df_price['TSI'] = df_price.apply(
+    #     lambda row: row['EMA_EMA_MOM'] / row['EMA_EMA_ABS_MOM'] * 100 if not np.isclose(row['EMA_EMA_ABS_MOM'], 0) else 0, axis=1
+    # )
+    # # tsi = EMA(EMA(df_price['mom'].values.astype(float), timeperiod1), timeperiod2) / \
+    # #     EMA(EMA(df_price['mom'].abs().values.astype(float), timeperiod1), timeperiod2) * 100
+    # # df_price['tsi'] = tsi
+    # return df_price['TSI']
 
 
 def UI(prices, timeperiod=14):
@@ -1583,33 +1653,6 @@ def UI(prices, timeperiod=14):
     r = (df_price['close'] - max_close_n) / max_close_n * 100
     ui = pd.rolling_sum(r ** 2, timeperiod) / timeperiod
     return ui
-
-
-# def UPN(prices, timeperiod=14):
-#     """
-#     说明：
-#
-#     计算方法:
-#     UP=IF(CLOSE>CLOSE[1],CLOSE[1]-CLOSE,0)
-#     UA=(UP[1]*(N-1)+UP)/N
-#     :param prices:
-#     :param timeperiod:
-#     :return:
-#     """
-#     assert prices is not None
-#     _assert_greater_or_equal(len(prices), timeperiod)
-#     assert isinstance(timeperiod, int)
-#     # assert isinstance(timeperiod2, int)
-#
-#     df_price = prices.copy()
-#     df_price = df_price.sort_index(ascending=True)
-#     df_price['close1'] = df_price['close'].shift(1)
-#     df_price['UP'] = df_price.apply(
-#         lambda row: row['close1'] - row['close'] if row['close'] > row['close1'] else 0, axis=1
-#     )
-#     ua = (df_price['UP'].shift(1) * (timeperiod - 1) +
-#           df_price['UP']) / timeperiod
-#     return ua
 
 
 def VAMA(prices, timeperiod=20, price='close'):
@@ -1666,17 +1709,33 @@ def VHF(prices, timeperiod=20):
     _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
-    hcp = pd.rolling_max(df_price['high'], timeperiod)
-    lcp = pd.rolling_min(df_price['low'], timeperiod)
-    df_price['A'] = (hcp - lcp).abs()
-    abs_colse_close1 = (df_price['close'] - df_price['close'].shift(1)).abs()
-    df_price['B'] = pd.rolling_sum(abs_colse_close1, timeperiod)
-    df_price['VHF'] = df_price.apply(
-        lambda row: row['A'] / row['B'] if not np.isclose(row['B'], 0) else 0, axis=1
-    )
-    return df_price['VHF']
+
+    # df_price = prices.copy()
+    df_price = prices.sort_index(ascending=True)
+    high, low, close = df_price[['high', 'low', 'close']].T.values
+
+    MAX = ta.MAX
+    MIN = ta.MIN
+    SUM = ta.SUM
+
+    hcp = MAX(high, timeperiod)
+    lcp = MIN(low, timeperiod)
+    a = np.abs(hcp - lcp)
+    b = SUM(np.abs(close - inp.shift(close, 1, cval=np.nan)), timeperiod)
+
+    vhf = a / b
+    vhf[np.isinf(vhf)] = 0.0
+    return pd.Series(vhf, index=df_price.index)
+
+    # hcp = pd.rolling_max(df_price['high'], timeperiod)
+    # lcp = pd.rolling_min(df_price['low'], timeperiod)
+    # df_price['A'] = (hcp - lcp).abs()
+    # abs_colse_close1 = (df_price['close'] - df_price['close'].shift(1)).abs()
+    # df_price['B'] = pd.rolling_sum(abs_colse_close1, timeperiod)
+    # df_price['VHF'] = df_price.apply(
+    #     lambda row: row['A'] / row['B'] if not np.isclose(row['B'], 0) else 0, axis=1
+    # )
+    # return df_price['VHF']
 
 
 def VMACD(prices, timeperiod1=12, timeperiod2=26, timeperiod3=9):
@@ -1807,25 +1866,43 @@ def VR(prices, timeperiod=26):
     assert prices is not None
     _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
+    # df_price = prices.copy()
+    df_price = prices.sort_index(ascending=True)
 
-    df_price['close1'] = df_price['close'].shift(1)
-    df_price['A'] = df_price.apply(
-        lambda row: row['volume'] if row['close'] > row['close1'] else 0, axis=1
-    )
-    df_price['B'] = df_price.apply(
-        lambda row: row['volume'] if row['close'] < row['close1'] else 0, axis=1
-    )
+    close, volume = df_price[['close', 'volume']].T.values
 
-    SUM = pd.rolling_sum
-    df_price['SUM_A'] = SUM(df_price['A'], timeperiod)
-    df_price['SUM_B'] = SUM(df_price['B'], timeperiod)
-    df_price['VR'] = df_price.apply(
-        lambda row: row['SUM_A'] / row['SUM_B'] * 100 if not np.isclose(row['SUM_B'], 0) else 0, axis=1
-    )
+    close1 = inp.shift(close, 1, cval=np.nan)
 
-    return df_price['VR']
+    cond1 = close > close1
+    cond2 = close < close1
+
+    a = np.zeros(shape=close1.shape, dtype=float)
+    b = a.copy()
+    a[cond1] = volume[cond1]
+    b[cond2] = volume[cond2]
+
+    SUM = ta.SUM
+    vr = SUM(a, timeperiod) / SUM(b, timeperiod) * 100
+    vr[np.isinf(vr)] = 0.0
+
+
+
+    # df_price['close1'] = df_price['close'].shift(1)
+    # df_price['A'] = df_price.apply(
+    #     lambda row: row['volume'] if row['close'] > row['close1'] else 0, axis=1
+    # )
+    # df_price['B'] = df_price.apply(
+    #     lambda row: row['volume'] if row['close'] < row['close1'] else 0, axis=1
+    # )
+    #
+    # SUM = pd.rolling_sum
+    # df_price['SUM_A'] = SUM(df_price['A'], timeperiod)
+    # df_price['SUM_B'] = SUM(df_price['B'], timeperiod)
+    # df_price['VR'] = df_price.apply(
+    #     lambda row: row['SUM_A'] / row['SUM_B'] * 100 if not np.isclose(row['SUM_B'], 0) else 0, axis=1
+    # )
+    #
+    # return df_price['VR']
 
 
 def VROC(prices, timeperiod=14):
@@ -1873,38 +1950,62 @@ def VRSI(prices, timeperiod=14):
     assert prices is not None
     _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
+    # df_price = prices.copy()
+    df_price = prices.sort_index(ascending=True)
+    close, volume = df_price[['close', 'volume']].T.values
+    close1 = inp.shift(close, 1, cval=np.nan)
 
-    df_price['close1'] = df_price['close'].shift(1)
+    cond1 = close > close1
+    cond_e = np.isclose(close, close1)
+    cond2 = close < close1
 
-    def _U(row):
-        ret = None
-        if row['close'] > row['close1']:
-            ret = row['volume']
-        elif np.isclose(row['close'], row['close1']):
-            ret = row['volume'] / 2
-        else:
-            ret = 0
-        return ret
+    u = np.empty(shape=close1.shape)
+    d = u.copy()
 
-    def _D(row):
-        ret = None
-        if row['close'] < row['close1']:
-            ret = row['volume']
-        elif np.isclose(row['close'], row['close1']):
-            ret = row['volume'] / 2
-        else:
-            ret = 0
-        return ret
+    u[cond1] = volume[cond1]
+    u[cond_e] = 0.5 * volume[cond_e]
+    u[~(cond1 | cond_e)] = 0.0
 
-    df_price['U'] = df_price.apply(_U, axis=1)
-    df_price['D'] = df_price.apply(_D, axis=1)
+    d[cond2] = volume[cond2]
+    d[cond_e] = 0.5 * volume[cond_e]
+    d[~(cond2 | cond_e)] = 0.0
 
-    UU = ((timeperiod - 1) * df_price['U'].shift(1) + df_price['U']) / timeperiod
-    DD = ((timeperiod - 1) * df_price['D'].shift(1) + df_price['D']) / timeperiod
-    vrsi = UU / (UU + DD) * 100
-    return vrsi
+    uu = ((timeperiod - 1) * inp.shift(u, 1, order=0, cval=np.nan) + u) / timeperiod
+    dd = ((timeperiod - 1) * inp.shift(d, 1, order=0, cval=np.nan) + d) / timeperiod
+
+    vrsi = 100 * uu / (uu + dd)
+
+    return pd.Series(vrsi, index=df_price.index)
+
+    # df_price['close1'] = df_price['close'].shift(1)
+    #
+    # def _U(row):
+    #     ret = None
+    #     if row['close'] > row['close1']:
+    #         ret = row['volume']
+    #     elif np.isclose(row['close'], row['close1']):
+    #         ret = row['volume'] / 2
+    #     else:
+    #         ret = 0
+    #     return ret
+    #
+    # def _D(row):
+    #     ret = None
+    #     if row['close'] < row['close1']:
+    #         ret = row['volume']
+    #     elif np.isclose(row['close'], row['close1']):
+    #         ret = row['volume'] / 2
+    #     else:
+    #         ret = 0
+    #     return ret
+    #
+    # df_price['U'] = df_price.apply(_U, axis=1)
+    # df_price['D'] = df_price.apply(_D, axis=1)
+    #
+    # UU = ((timeperiod - 1) * df_price['U'].shift(1) + df_price['U']) / timeperiod
+    # DD = ((timeperiod - 1) * df_price['D'].shift(1) + df_price['D']) / timeperiod
+    # vrsi = UU / (UU + DD) * 100
+    # return vrsi
 
 
 def WC(prices):
@@ -1931,28 +2032,7 @@ def WC(prices):
     return wc
 
 
-# def WS(prices, timeperiod=5):
-#     """
-#     说明：
-#     怀尔德平滑由威尔斯.怀尔德发明，是类似于指数移动平均的移动平均方法，
-#     对指标计算中的所有数据保持递减的越来越小的百分比，对价格变化的反应慢于其他移动平均指标。
-#
-#     计算方法:
-#     C=（CLOSE-WS[1]）/N
-#     WS=C+WS[1]
-#     N通常为5
-#     或
-#     WWMA=(WWMA[1]*(N-1)+CLOSE)/N
-#
-#      用哪个公式合适？
-#     :param prices:
-#     :param timeperiod:
-#     :return:
-#     """
-#     pass
-
-
-def WAD(prices, timeperiod=14):
+def WAD(prices):
     """
     48. WAD威廉姆斯累积/派发指标（Williams’s Accumulation/Distribution，WAD)
     说明：
@@ -1972,31 +2052,52 @@ def WAD(prices, timeperiod=14):
     :return:
     """
     assert prices is not None
-    _assert_greater_or_equal(len(prices), timeperiod)
-    assert isinstance(timeperiod, int)
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
+    # _assert_greater_or_equal(len(prices), timeperiod)
+    # assert isinstance(timeperiod, int)
+    # df_price = prices.copy()
+    df_price = prices.sort_index(ascending=True)
+    high, low, close = df_price[['high', 'low', 'close']].T.values
 
-    df_price['close1'] = df_price['close'].shift(1)
-    df_price['TRH'] = df_price.apply(
-        lambda row: max(row['close1'], row['high']), axis=1)
-    df_price['TRL'] = df_price.apply(
-        lambda row: min(row['close1'], row['low']), axis=1)
+    close1 = inp.shift(close, 1, cval=np.nan)
 
-    def _a_over_d(row):
-        if row['close'] > row['close1']:
-            ret = row['close'] - row['TRL']
-        elif row['close'] < row['close1']:
-            ret = row['close'] - row['TRH']
-        else:
-            ret = 0
+    # CUM = np.cumsum
 
-        return ret
+    trh = np.max(np.column_stack((close1, high)), axis=1)
 
-    df_price['A_OVER_D'] = df_price.apply(_a_over_d, axis=1)
+    trl = np.min(np.column_stack((close1, low)), axis=1)
 
-    wad = df_price['A_OVER_D'].cumsum()
-    return wad
+    cond1 = close > close1
+    cond2 = close < close1
+
+    a_over_d = np.empty(shape=close1.shape, dtype=float)
+    a_over_d[cond1] = (close - trl)[cond1]
+    a_over_d[~cond1 & cond2] = (close - trh)[~cond1 & cond2]
+    a_over_d[~(cond1 | cond2)] = 0.0
+
+    wad = np.cumsum(a_over_d)
+
+    return pd.Series(wad, index=df_price.index)
+
+    # df_price['close1'] = df_price['close'].shift(1)
+    # df_price['TRH'] = df_price.apply(
+    #     lambda row: max(row['close1'], row['high']), axis=1)
+    # df_price['TRL'] = df_price.apply(
+    #     lambda row: min(row['close1'], row['low']), axis=1)
+    #
+    # def _a_over_d(row):
+    #     if row['close'] > row['close1']:
+    #         ret = row['close'] - row['TRL']
+    #     elif row['close'] < row['close1']:
+    #         ret = row['close'] - row['TRH']
+    #     else:
+    #         ret = 0
+    #
+    #     return ret
+    #
+    # df_price['A_OVER_D'] = df_price.apply(_a_over_d, axis=1)
+    #
+    # wad = df_price['A_OVER_D'].cumsum()
+    # return wad
 
 
 def _assert_not_none(a):
@@ -2044,7 +2145,6 @@ __all__ = {
     'TS',
     'TSI',
     'UI',
-    'UPN',
     'VAMA',
     'VHF',
     'VIDYA',
@@ -2058,11 +2158,64 @@ __all__ = {
     'WC'
 }
 if __name__ == '__main__':
+    p = pd.read_csv('../orcl-2000.csv', index_col=0, parse_dates=True)
+    p.columns = [str.lower(col) for col in p.columns]
+
+
+    # p = pd.concat([p for _ in xrange(100)], ignore_index=True)
+
+
+    # test('BR')
+    # main()
+
     def main():
-        p = pd.read_csv('../orcl-2000.csv', index_col=0, parse_dates=True)
-        p.columns = [str.lower(col) for col in p.columns]
+        # p = pd.read_csv('../orcl-2000.csv', index_col=0, parse_dates=True)
+        # p.columns = [str.lower(col) for col in p.columns]
         ret = CVI(p)
         print(ret)
 
 
-    main()
+        # main()
+        # import inspect
+        #
+        # decorated_func = inspect.getmembers(RMI)
+        # print(decorated_func)
+
+
+    def test(func_name):
+        import ls_talib_benchmark as benchmark
+        import ls_talib
+        import talib
+        from time import time
+        # import pandas as pd
+
+
+
+        df = p
+        N = 10
+        func1 = benchmark.__getattribute__(func_name)
+        t0 = time()
+        for idx in range(N):
+            ret1 = func1(df)
+        t1 = time() - t0
+        print('Benchmarks nan is {0}, total time: {1}'.format(ret1.isnull().sum(), t1))
+
+        func2 = ls_talib.__getattribute__(func_name)
+        t0 = time()
+        for idx in xrange(N):
+            ret2 = func2(df)
+        t2 = time() - t0
+        print('{0} nan is {1}, total time: {2}'.format(func2.__name__, ret2.isnull().sum(), t2))
+
+        assert np.allclose(ret1.dropna(), ret2.dropna())
+
+        t0 = time()
+        for idx in xrange(N):
+            talib.abstract.CCI(df)
+        t3 = time() - t0
+        print('talib function total time: {0}'.format(t3))
+
+        print("your func is {0} times faster than Benchmark, is {1} times compared with talib ".format(t1 / t2, t3 / t2))
+
+
+    test('CR')
