@@ -32,7 +32,7 @@ def ACC(prices, timeperiod=12):
     return ret
 
 
-@jit
+# @jit
 def ACD(prices, timeperiod=14):
     """
     DIF = CLOSE-IF(CLOSE>CLOSE[1],MIN(LOW,CLOSE[1]),MAX(HIGH,CLOSE[1]))
@@ -48,15 +48,41 @@ def ACD(prices, timeperiod=14):
 
     # df_price = prices.copy()
     df_price = prices.sort(ascending=True)
-    close1 = df_price['close'].shift(1).values
-    close = df_price['close'].values
-    low = df_price['low'].values
-    high = df_price['high'].values
 
-    dif = np.zeros_like(close1, dtype=float)
+    high, low, close = df_price[['high', 'low', 'close']].T.values
+    close1 = inp.shift(close, 1, order=0, cval=np.nan)
 
-    for idx in xrange(len(dif)):
-        dif[idx] = close[idx] - (min(low[idx], close1[idx]) if close[idx] > close1[idx] else max(high[idx], close1[idx]))
+    min_low_close1 = np.min(np.column_stack((low, close1)), axis=1)
+    max_high_close1 = np.max(np.column_stack((high, close1)), axis=1)
+
+    minuend = max_high_close1
+
+    cond1 = close > close1
+
+    minuend[cond1] = min_low_close1[cond1]
+
+    dif = close - minuend
+
+    dif_or_0 = dif
+
+    cond2 = np.isclose(close, close1)  # close == close1
+
+    dif_or_0[cond2] = 0
+
+    SUM = ta.SUM
+    acd = SUM(dif_or_0, timeperiod)
+
+    return pd.Series(acd, index=df_price.index)
+
+    # close1 = df_price['close'].shift(1).values
+    # close = df_price['close'].values
+    # low = df_price['low'].values
+    # high = df_price['high'].values
+
+    # dif = np.zeros_like(close1, dtype=float)
+    #
+    # for idx in xrange(len(dif)):
+    #     dif[idx] = close[idx] - (min(low[idx], close1[idx]) if close[idx] > close1[idx] else max(high[idx], close1[idx]))
 
     # def _dif(row):
     #     ret1 = min(row['low'], row['close1']) if row['close'] > row[
@@ -72,16 +98,16 @@ def ACD(prices, timeperiod=14):
     # df_price['DIF2'] = df_price.apply(
     #     func, axis=1)
 
-    dif2 = np.zeros_like(close, dtype=float)
+    # dif2 = np.zeros_like(close, dtype=float)
+    #
+    # for idx in xrange(len(dif2)):
+    #     dif2[idx] = 0 if np.isclose(close[idx], close1[idx]) else dif[idx]
+    #
+    # acd = ta.SUM(dif2, timeperiod)
+    # return pd.Series(acd, index=df_price.index)
 
-    for idx in xrange(len(dif2)):
-        dif2[idx] = 0 if np.isclose(close[idx], close1[idx]) else dif[idx]
 
-    acd = ta.SUM(dif2, timeperiod)
-    return pd.Series(acd, index=df_price.index)
-
-
-@jit
+# @jit
 def ADTM(prices, timeperiod=14):
     """
     说明：ADTM是用开盘价的向上波动幅度和向下波动幅度的距离差值来描述人气高低的指标。
@@ -103,55 +129,86 @@ def ADTM(prices, timeperiod=14):
 
     df_price = prices.copy()
     df_price = df_price.sort_index(ascending=True)
-    open = df_price['open'].values
-    open1 = df_price['open'].shift(1).values
-    high = df_price['high'].values
-    low = df_price['low'].values
 
-    dtm = np.zeros_like(open1, dtype=float)
-    for idx in xrange(len(dtm)):
-        dtm[idx] = 0 if open[idx] <= open1[idx] else np.max((high[idx] - open[idx], open[idx] - open1[idx]))
+    open, high, low = df_price[['open', 'high', 'low']].T.values
 
-    # df_price['DTM'] = df_price.apply(
-    #     lambda row: 0 if row['open'] <= row['open1'] else max(
-    #         row['high'] - row['open'], row['open'] - row['open1']), axis=1)
+    open1 = inp.shift(open, 1, order=0, cval=np.nan)
 
-    dbm = np.zeros_like(open1, dtype=float)
-    for idx in xrange(len(dbm)):
-        dbm[idx] = 0 if open[idx] >= open1[idx] else np.max((open[idx] - low[idx], open[idx] - open1[idx]))
+    max1 = np.amax(np.column_stack((high - open, open - open1)), axis=1)
+    cond1 = open <= open1
+    dtm = max1.copy()
+    dtm[cond1] = 0.0
 
-    # df_price['DBM'] = df_price.apply(
-    #     lambda row: 0 if row['open'] >= row['open1'] else max(
-    #         row['open'] - row['low'], row['open'] - row['open1']), axis=1)
+    max2 = np.amax(np.column_stack((open - low, open - open1)), axis=1)
+    cond2 = open >= open1
+    dbm = max2.copy()
+    dbm[cond2] = 0.0
 
-    stm = ta.SUM(dtm, timeperiod)
-    sbm = ta.SUM(dbm, timeperiod)
-    # df_price['STM'] = pd.rolling_sum(df_price['DTM'], timeperiod)
-    # df_price['SBM'] = pd.rolling_sum(df_price['DBM'], timeperiod)
+    SUM = ta.SUM
+    stm_n = SUM(dtm, timeperiod)
+    sbm_n = SUM(dbm, timeperiod)
 
-    # def _adtm(row):
-    #     ret = None
-    #     if np.isnan(row['STM']) or np.isnan(row['SBM']):
-    #         ret = np.nan
-    #     elif row['STM'] > row['SBM']:
-    #         ret = (row['STM'] - row['SBM']) / row['STM']
-    #     elif row['STM'] < row['SBM']:
-    #         ret = (row['STM'] - row['SBM']) / row['SBM']
-    #     else:
-    #         ret = 0
+    # adtm
+    cond3 = stm_n > sbm_n
+    cond4 = stm_n < sbm_n
+
+    adtm = np.empty(shape=open1.shape)
+    adtm[cond3] = (stm_n[cond3] - sbm_n[cond3]) / stm_n[cond3]
+    adtm[cond4] = ((stm_n - sbm_n) / sbm_n)[cond4]
+    adtm[np.isclose(stm_n, sbm_n)] = 0.0
+    ## IMPORTANT!!
+    adtm[np.isnan(stm_n) | np.isnan(sbm_n)] = np.nan
+
+
+    # open = df_price['open'].values
+    # open1 = df_price['open'].shift(1).values
+    # high = df_price['high'].values
+    # low = df_price['low'].values
     #
-    #     return ret
-
-    adtm = np.zeros_like(open1, dtype=float)
-    for idx in xrange(len(adtm)):
-        if np.isnan(stm[idx]) or np.isnan(sbm[idx]):
-            adtm[idx] = np.nan
-        elif stm[idx] > sbm[idx]:
-            adtm[idx] = (stm[idx] - sbm[idx]) / stm[idx]
-        elif stm[idx] < sbm[idx]:
-            adtm[idx] = (stm[idx] - sbm[idx]) / sbm[idx]
-        else:
-            adtm[idx] = 0
+    # dtm = np.zeros_like(open1, dtype=float)
+    # for idx in xrange(len(dtm)):
+    #     dtm[idx] = 0 if open[idx] <= open1[idx] else np.max((high[idx] - open[idx], open[idx] - open1[idx]))
+    #
+    # # df_price['DTM'] = df_price.apply(
+    # #     lambda row: 0 if row['open'] <= row['open1'] else max(
+    # #         row['high'] - row['open'], row['open'] - row['open1']), axis=1)
+    #
+    # dbm = np.zeros_like(open1, dtype=float)
+    # for idx in xrange(len(dbm)):
+    #     dbm[idx] = 0 if open[idx] >= open1[idx] else np.max((open[idx] - low[idx], open[idx] - open1[idx]))
+    #
+    # # df_price['DBM'] = df_price.apply(
+    # #     lambda row: 0 if row['open'] >= row['open1'] else max(
+    # #         row['open'] - row['low'], row['open'] - row['open1']), axis=1)
+    #
+    # stm = ta.SUM(dtm, timeperiod)
+    # sbm = ta.SUM(dbm, timeperiod)
+    # # df_price['STM'] = pd.rolling_sum(df_price['DTM'], timeperiod)
+    # # df_price['SBM'] = pd.rolling_sum(df_price['DBM'], timeperiod)
+    #
+    # # def _adtm(row):
+    # #     ret = None
+    # #     if np.isnan(row['STM']) or np.isnan(row['SBM']):
+    # #         ret = np.nan
+    # #     elif row['STM'] > row['SBM']:
+    # #         ret = (row['STM'] - row['SBM']) / row['STM']
+    # #     elif row['STM'] < row['SBM']:
+    # #         ret = (row['STM'] - row['SBM']) / row['SBM']
+    # #     else:
+    # #         ret = 0
+    # #
+    # #     return ret
+    #
+    # adtm = np.zeros_like(open1, dtype=float)
+    # for idx in xrange(len(adtm)):
+    #     if np.isnan(stm[idx]) or np.isnan(sbm[idx]):
+    #         adtm[idx] = np.nan
+    #     elif stm[idx] > sbm[idx]:
+    #         adtm[idx] = (stm[idx] - sbm[idx]) / stm[idx]
+    #     elif stm[idx] < sbm[idx]:
+    #         adtm[idx] = (stm[idx] - sbm[idx]) / sbm[idx]
+    #     else:
+    #         adtm[idx] = 0
 
     adtm = pd.Series(adtm, index=df_price.index)
     return adtm
@@ -251,7 +308,7 @@ def ARC(prices, timeperiod=14):
     return arc
 
 
-@jit
+# @jit
 def ASI(prices, timeperiod=14):
     """
     7.  ASI累计振动升降指标
@@ -279,15 +336,18 @@ def ASI(prices, timeperiod=14):
     _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
-    close1 = df_price['close'].shift(1).values
-    low1 = df_price['low'].shift(1).values
-    open1 = df_price['open'].shift(1).values
-    high = df_price['high'].values
-    low = df_price['low'].values
-    close = df_price['close'].values
-    open = df_price['open'].values
+    # df_price = prices.copy()
+    df_price = prices.sort_index(ascending=True)
+
+    open, high, low, close = df_price[['open', 'high', 'low', 'close']].T.values
+
+    close1 = inp.shift(close, 1, order=0, cval=np.nan)
+    low1 = inp.shift(low, 1, order=0, cval=np.nan)
+    open1 = inp.shift(open, 1, order=0, cval=np.nan)
+    # high = df_price['high'].values
+    # low = df_price['low'].values
+    # close = df_price['close'].values
+    # open = df_price['open'].values
 
     A = np.abs(high - close1)
     B = np.abs(low - close1)
@@ -300,20 +360,32 @@ def ASI(prices, timeperiod=14):
 
     X = E + 0.5 * F + G
 
-    K = np.zeros_like(open1)
-    for idx in xrange(len(K)):
-        K[idx] = np.max((A[idx], B[idx]))
+    K = np.amax(np.column_stack((A, B)), axis=1)
+
+    # K = np.zeros_like(open1)
+    # for idx in xrange(len(K)):
+    #     K[idx] = np.max((A[idx], B[idx]))
     # K = df_price.apply(
     #     lambda row: max(row['A'], row['B']), axis=1)
 
-    R = np.zeros_like(open1)
-    for idx in xrange(len(R)):
-        if A[idx] > B[idx] and A[idx] > C[idx]:
-            R[idx] = A[idx] + 0.5 * B[idx] + 0.25 * D[idx]
-        elif B[idx] > A[idx] and B[idx] > C[idx]:
-            R[idx] = B[idx] + 0.5 * A[idx] + 0.25 * D[idx]
-        else:
-            R[idx] = C[idx] + 0.25 * D[idx]
+    R = np.empty(shape=open1.shape)
+
+    cond1 = (A > B) & (A > C)
+    cond2 = (B > A) & (B > C)
+
+    R[cond1] = (A + 0.5 * B + 0.25 * D)[cond1]
+    R[~cond1 & cond2] = (B + 0.5 * A + 0.25 * D)[~cond1 & cond2]
+
+    R[~(cond1 | cond2)] = (C + 0.25 * D)[~(cond1 | cond2)]
+
+
+    # for idx in xrange(len(R)):
+    #     if A[idx] > B[idx] and A[idx] > C[idx]:
+    #         R[idx] = A[idx] + 0.5 * B[idx] + 0.25 * D[idx]
+    #     elif B[idx] > A[idx] and B[idx] > C[idx]:
+    #         R[idx] = B[idx] + 0.5 * A[idx] + 0.25 * D[idx]
+    #     else:
+    #         R[idx] = C[idx] + 0.25 * D[idx]
 
 
 
@@ -1269,10 +1341,6 @@ def RVI(prices, timeperiod1=10, timeperiod2=14):
     N1 = timeperiod1
     N2 = timeperiod2
 
-
-
-
-
     def _UM(price, N1):
         df_price[price + str(1)] = df_price[price].shift(1)
         STD = pd.rolling_std
@@ -2218,4 +2286,4 @@ if __name__ == '__main__':
         print("your func is {0} times faster than Benchmark, is {1} times compared with talib ".format(t1 / t2, t3 / t2))
 
 
-    test('CR')
+    test('ADTM')
