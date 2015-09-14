@@ -70,8 +70,8 @@ def ACD(prices, timeperiod=14):
     df_price['close1'] = df_price['close'].shift(1)
 
     def _dif(row):
-        ret1 = min(row['low'], row['close1']) if row['close'] > row[
-            'close1'] else max(row['high'], row['close1'])
+        ret1 = np.min((row['low'], row['close1'])) if row['close'] > row[
+            'close1'] else np.max((row['high'], row['close1']))
         return row['close'] - ret1
 
     df_price['DIF'] = df_price.apply(_dif, axis=1)
@@ -105,11 +105,11 @@ def ADTM(prices, timeperiod=14):
     df_price = df_price.sort_index(ascending=True)
     df_price['open1'] = df_price['open'].shift(1)
     df_price['DTM'] = df_price.apply(
-        lambda row: 0 if row['open'] <= row['open1'] else max(
-            row['high'] - row['open'], row['open'] - row['open1']), axis=1)
+        lambda row: 0 if row['open'] <= row['open1'] else np.max((
+            row['high'] - row['open'], row['open'] - row['open1'])), axis=1)
     df_price['DBM'] = df_price.apply(
-        lambda row: 0 if row['open'] >= row['open1'] else max(
-            row['open'] - row['low'], row['open'] - row['open1']), axis=1)
+        lambda row: 0 if row['open'] >= row['open1'] else np.max((
+            row['open'] - row['low'], row['open'] - row['open1'])), axis=1)
     df_price['STM'] = pd.rolling_sum(df_price['DTM'], timeperiod)
     df_price['SBM'] = pd.rolling_sum(df_price['DBM'], timeperiod)
 
@@ -175,9 +175,9 @@ def BR(prices, timeperiod=14):
     df_price = df_price.sort_index(ascending=True)
     df_price['close1'] = df_price['close'].shift(1)
     df_price['high-close1'] = df_price.apply(
-        lambda row: max(0, row['high'] - row['close1']), axis=1)
+        lambda row: np.max((0, row['high'] - row['close1'])), axis=1)
     df_price['close1-low'] = df_price.apply(
-        lambda row: max(0, row['close1'] - row['low']), axis=1)
+        lambda row: np.max((0, row['close1'] - row['low'])), axis=1)
 
     br = pd.rolling_sum(df_price['high-close1'], timeperiod) / \
         pd.rolling_sum(df_price['close1-low'], timeperiod) * 100
@@ -505,9 +505,9 @@ def CR(prices, timeperiod=14):
         df_price['high'] + df_price['low'] + df_price['close']) / 3
     df_price['mid1'] = df_price['mid'].shift(1)
     df_price['max_high_mid1'] = df_price.apply(
-        lambda row: max(0, row['high'] - row['mid1']), axis=1)
+        lambda row: np.max((0, row['high'] - row['mid1'])), axis=1)
     df_price['max_mid1_low'] = df_price.apply(
-        lambda row: max(0, row['mid1'] - row['low']), axis=1)
+        lambda row: np.max((0, row['mid1'] - row['low'])), axis=1)
     SUM = pd.rolling_sum
     cr = SUM(df_price['max_high_mid1'], timeperiod) / \
         SUM(df_price['max_mid1_low'], timeperiod) * 100
@@ -1001,7 +1001,7 @@ def RI(prices, timeperiod1=20, timeperiod2=5):
     df_price = df_price.sort_index(ascending=True)
     df_price['close1'] = df_price['close'].shift(1)
     df_price['TR'] = df_price.apply(
-        lambda row: max(row['high'] - row['low'], abs(row['close1']-row['high']), abs(row['close1'] - row['low'])), axis=1
+        lambda row: np.max(np.column_stack((row['high'] - row['low'], abs(row['close1']-row['high']), abs(row['close1'] - row['low'])))), axis=1
     )
     df_price['W'] = df_price.apply(
         lambda row: row['TR']/(row['close'] - row['close1']) if row['close'] > row['close1'] else row['TR'], axis=1
@@ -1342,7 +1342,7 @@ def TR(prices):
     df_price = df_price.sort_index(ascending=True)
     df_price['close1'] = df_price['close'].shift(1)
     df_price['TR'] = df_price.apply(
-        lambda row: max(row['high']-row['low'], abs(row['high']-row['close1']), abs(row['low'] - row['close1'])), axis=1
+        lambda row: np.max((row['high']-row['low'], abs(row['high']-row['close1']), abs(row['low'] - row['close1']))), axis=1
     )
     return df_price['TR']
 
@@ -1749,7 +1749,7 @@ def VRSI(prices, timeperiod=14):
         elif np.isclose(row['close'], row['close1']):
             ret = row['volume'] / 2
         else:
-            ret = 0
+            ret = 0.0
         return ret
 
     def _D(row):
@@ -1759,7 +1759,7 @@ def VRSI(prices, timeperiod=14):
         elif np.isclose(row['close'], row['close1']):
             ret = row['volume'] / 2
         else:
-            ret = 0
+            ret = 0.0
         return ret
     df_price['U'] = df_price.apply(_U, axis=1)
     df_price['D'] = df_price.apply(_D, axis=1)
@@ -1870,8 +1870,9 @@ def _assert_greater(a, b):
 
 if __name__ == '__main__':
     def main():
-        p = pd.read_csv('../data/data_2014.csv', index_col=0, parse_dates=True)
-        ret = RVI(p)
+        p = pd.read_csv('../orcl-2000.csv', index_col=0, parse_dates=True)
+        p.columns = [str.lower(col) for col in p.columns]
+        ret = VRSI(p)
         print(ret)
 
     main()
