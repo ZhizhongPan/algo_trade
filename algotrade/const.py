@@ -39,8 +39,31 @@ class FREQUENCY(Enum):
     MONTH = 24 * 60 * 60 * 31
 
 
+# class OrderStatus(Enum):
+#     ACCEPTED = 1  # BaseOrder has been acknowledged by the broker.
+#     CANCELED = 2  # BaseOrder has been canceled.
+#     PARTIALLY_FILLED = 3  # BaseOrder has been partially filled.
+#     FILLED = 4  # BaseOrder has been completely filled.
+
+
+class OrderAction(Enum):
+    BUY = 1
+    BUY_TO_COVER = 2
+    SELL = 3
+    SELL_SHORT = 4
+
+
 class OrderStatus(Enum):
-    ACCEPTED = 1  # BaseOrder has been acknowledged by the broker.
-    CANCELED = 2  # BaseOrder has been canceled.
-    PARTIALLY_FILLED = 3  # BaseOrder has been partially filled.
-    FILLED = 4  # BaseOrder has been completely filled.
+    INITIAL = 1  # Initial state.
+    SUBMITTED = 2  # BaseOrder has been submitted.
+    ACCEPTED = 3  # BaseOrder has been acknowledged by the broker.
+    CANCELED = 4  # BaseOrder has been canceled.
+    PARTIALLY_FILLED = 5  # BaseOrder has been partially filled.
+    FILLED = 6  # BaseOrder has been completely filled.
+
+
+class OrderType(Enum):
+    MARKET = 1
+    LIMIT = 2
+    STOP = 3
+    STOP_LIMIT = 4
