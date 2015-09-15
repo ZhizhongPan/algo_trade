@@ -90,4 +90,9 @@ def num_bars_to_accumulate(func_name, timeperiod=np.nan, timeperiod1=np.nan, tim
         'RMI': timeperiod1 + timeperiod2 + 1,
         'PFE': timeperiod1 + timeperiod2
     }
+
+    # print len(tables)
     return tables[func_name]
+
+if __name__ == '__main__':
+    num_bars_to_accumulate('ACC')

@@ -86,6 +86,10 @@ class BaseStrategy:
                     raise e(func_name + ' ' + ind)
 
     def __calc_signals_concurrency(self):
+        """
+        deprecated: 速度慢
+        :return:
+        """
         futures = set()
         with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
             for func_name, param_dict in self.__ta_factors:
@@ -146,7 +150,7 @@ class BaseStrategy:
 
 
 class FixedPeriodStrategy(BaseStrategy):
-    def __init__(self, barfeed, broker, tafactors=None):
+    def __init__(self, barfeed=None, broker=None, tafactors=None):
         super(FixedPeriodStrategy).__init__(barfeed, broker, tafactors)
         self.previous_code_list = set()
         self.current_code_list = set()

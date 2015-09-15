@@ -240,7 +240,7 @@ def AR(prices, timeperiod=14):
     return ar
 
 
-@jit
+# @jit
 def BR(prices, timeperiod=14):
     """
     BR指标也是反映当前情况下多空双方力量争斗的结果。
@@ -871,7 +871,7 @@ def IMI(prices, timeperiod=14):
     # return df_price['IMI']
 
 
-def KVO(prices, timeperiod1=34, timeperiod2=55, trigger_line=13):
+def KVO(prices, timeperiod1=34, timeperiod2=55, timeperiod3=13):
     """
     TP_TODAY = (HTODAY + LTODAY + CTODAY) / 3
     TP_YESTERDAY = (H_YESTERDAY + L_YESTERDAY + C_YESTERDAY) / 3
@@ -930,7 +930,7 @@ def KVO(prices, timeperiod1=34, timeperiod2=55, trigger_line=13):
     EMA = ta.EMA
     kvo = EMA(sv, timeperiod1) - EMA(sv, timeperiod2)
 
-    trig = EMA(kvo, trigger_line)
+    trig = EMA(kvo, timeperiod3)
 
     return pd.Series(trig, index=df_price.index)
 
@@ -944,8 +944,8 @@ def KVO(prices, timeperiod1=34, timeperiod2=55, trigger_line=13):
     # EWA = ta.EMA
     # df_price['kvo'] = EWA(
     #     df_price['SV'].values.astype(float), timeperiod1) - EWA(df_price['SV'].values.astype(float), timeperiod2)
-    # df_price['trigger_line'] = EWA(df_price['kvo'].values.astype(float), trigger_line)
-    # return df_price['trigger_line']
+    # df_price['timeperiod3'] = EWA(df_price['kvo'].values.astype(float), timeperiod3)
+    # return df_price['timeperiod3']
 
 
 def MI(prices, timeperiod=9):
@@ -1952,7 +1952,7 @@ def VR(prices, timeperiod=26):
     SUM = ta.SUM
     vr = SUM(a, timeperiod) / SUM(b, timeperiod) * 100
     vr[np.isinf(vr)] = 0.0
-
+    return pd.Series(vr, index=df_price.index)
 
 
     # df_price['close1'] = df_price['close'].shift(1)
@@ -2285,5 +2285,14 @@ if __name__ == '__main__':
 
         print("your func is {0} times faster than Benchmark, is {1} times compared with talib ".format(t1 / t2, t3 / t2))
 
+    def count_function_number():
+        import inspect
+        import ls_talib
+        ret = inspect.getmembers(ls_talib, predicate=inspect.isfunction)
+        # print(ret)
+        return filter(lambda x: x.isupper(), dict(ret).keys())
 
-    test('ADTM')
+    test('ACD')
+
+    # print count_function_number()
+    # print len(count_function_number())
