@@ -82,7 +82,7 @@ class BaseStrategy:
                     print len(self.dataframe), func_name, ind, ret[-1]
                     self.dataframe.ix[ind, func_name] = ret[-1]
                 except IndexError as e:
-                    print('func_name={0},ind={1}'.format(func_name, ind))
+                    print('__name={0},ind={1}'.format(func_name, ind))
                     raise e(func_name + ' ' + ind)
 
     def __calc_signals_concurrency(self):
@@ -145,12 +145,29 @@ class BaseStrategy:
         pass
 
 
-if __name__ == '__main__':
-    # ret = inspect.getmembers(lsta, inspect.isfunction)
-    # print(ret)
+class FixedPeriodStrategy(BaseStrategy):
+    def __init__(self, barfeed, broker, tafactors=None):
+        super(FixedPeriodStrategy).__init__(barfeed, broker, tafactors)
+        self.previous_code_list = set()
+        self.current_code_list = set()
+        self.to_sell = set()
+        self.to_buy = set()
+
+    def on_code_list_arrive(self, code_list):
+        """
+
+        :param code_list: a set,containing code to buy
+        :return:
+        """
+        code_list = set(code_list)
+
+        self.previous_code_list = self.current_code_list
+        self.current_code_list = code_list
+        self.to_sell = self.previous_code_list - self.current_code_list
+        self.to_buy = self.current_code_list - self.previous_code_list
 
 
-
+def main():
     ta_fac1 = [
         ('ACD', {'timeperiod': 14}),
         ('ACC', {}),
@@ -160,7 +177,6 @@ if __name__ == '__main__':
         ('SMI', {}),
         ('RI', {})
     ]
-
     ta_fac2 = [
         ('AD', {}),
         ('ADOSC', {}),
@@ -170,52 +186,17 @@ if __name__ == '__main__':
         ('ULTOSC', {}),
         ('OBV', {})
     ]
-
     barfeed = CSVBarFeed()
     barfeed.load_data_from_csv('../orcl-2000.csv')
     broker = BaseBroker()
     my_strategy = BaseStrategy(barfeed, broker, ta_fac1)
     import time
-
     t = time.time()
     my_strategy.run()
     print('total time {}'.format(time.time() - t))
 
 
-
-
-
-    # df = pd.read_csv('../orcl-2000.csv', index_col=[0], parse_dates=True).sort()
-    # df = df.astype(float)
-    # df.columns = [str.lower(col) for col in df.columns]
-    #
-    # ta_fun_lib = dict(inspect.getmembers(lsta, inspect.isfunction))
-    #
-    # result = []
-    # period = dict(
-    #     timeperiod1=10,
-    #     timeperiod2=20
-    # )
-    # for fun_name, fun in ta_fun_lib.iteritems():
-    #     args, _, _, defaults = inspect.getargspec(fun)
-    #     # if fun_name in ['WC', 'PVT', 'PVI', 'EMV', 'TR', 'NVI'] or fun_name in ['MAMA', 'MAVP']:
-    #     #     continue
-    #
-    #     if not defaults or len(defaults) != 2 or 'timeperiod2' not in args:
-    #         continue
-    #     else:
-    #         try:
-    #             ret = fun(df, **period)
-    #
-    #             result.append(dict(func_name=fun_name,
-    #                                number_of_NA=ret.isnull().sum(),
-    #                                period=period)
-    #                           )
-    #         except Exception as e:
-    #             print('=' * 120 + fun_name)
-    #
-    # ret_df = pd.DataFrame(result)
-    #
-    # import datetime
-    #
-    # ret_df.to_csv(str((datetime.datetime.now() - datetime.datetime(1970, 1, 1)).total_seconds()) + '.csv')
+if __name__ == '__main__':
+    # ret = inspect.getmembers(lsta, inspect.isfunction)
+    # print(ret)
+    main()
