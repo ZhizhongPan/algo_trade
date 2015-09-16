@@ -19,6 +19,7 @@ from .ls_talib import UI
 from .ls_talib import VAMA, VHF, VIDYA, VMACD, VO, VOSC, VR, VROC, VRSI
 from .ls_talib import WAD, WC
 import talib.abstract
+from talib.abstract import *
 
 __all__ = ['ACC',
            'ACD',
