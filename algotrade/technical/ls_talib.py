@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import talib as ta
 from talib.abstract import Function
-from numba import jit
 import scipy.ndimage.interpolation as inp
 
 
@@ -256,21 +255,35 @@ def BR(prices, timeperiod=14):
     _assert_greater_or_equal(len(prices), timeperiod)
     assert isinstance(timeperiod, int)
 
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
-    high = df_price['high'].values
-    low = df_price['low'].values
+    # df_price = prices.copy()
+    df_price = prices.sort_index(ascending=True)
+    high, low, close = df_price[['high', 'low', 'close']].T.values
+    # low = df_price['low'].values
     # close = df_price['close'].values
 
-    close1 = df_price['close'].shift(1).values
+    close1 = inp.shift(close, 1, order=0, cval=np.nan)
 
-    high_close1 = np.zeros_like(high, dtype=float)
-    for idx in xrange(len(high_close1)):
-        high_close1[idx] = np.max((0, high[idx] - close1[idx]))
+    # 分子
+    max1 = high - close1
+    max1[max1 < 0] = 0.0
 
-    close1_low = np.zeros_like(close1, dtype=float)
-    for idx in xrange(len(close1_low)):
-        close1_low[idx] = np.max([0, close1[idx] - low[idx]])
+    # 分母
+    max2 = close1 - low
+    max2[max2 < 0] = 0.0
+
+    # 最后
+    SUM = ta.SUM
+    br = SUM(max1, timeperiod) / SUM(max2, timeperiod) * 100
+
+
+
+    # high_close1 = np.zeros_like(high, dtype=float)
+    # for idx in xrange(len(high_close1)):
+    #     high_close1[idx] = np.max((0, high[idx] - close1[idx]))
+    #
+    # close1_low = np.zeros_like(close1, dtype=float)
+    # for idx in xrange(len(close1_low)):
+    #     close1_low[idx] = np.max([0, close1[idx] - low[idx]])
 
     # br = np.zeros_like(close1, dtype=float)
     #
@@ -281,8 +294,8 @@ def BR(prices, timeperiod=14):
     #     lambda row: max(0, row['high'] - row['close1']), axis=1)
     # df_price['close1-low'] = df_price.apply(
     #     lambda row: max(0, row['close1'] - row['low']), axis=1)
-    SUM = pd.rolling_sum
-    br = SUM(high_close1, timeperiod) / SUM(close1_low, timeperiod) * 100
+    # SUM = pd.rolling_sum
+    # br = SUM(high_close1, timeperiod) / SUM(close1_low, timeperiod) * 100
     return pd.Series(br, index=df_price.index)
 
 
@@ -2285,12 +2298,14 @@ if __name__ == '__main__':
 
         print("your func is {0} times faster than Benchmark, is {1} times compared with talib ".format(t1 / t2, t3 / t2))
 
+
     def count_function_number():
         import inspect
         import ls_talib
         ret = inspect.getmembers(ls_talib, predicate=inspect.isfunction)
         # print(ret)
         return filter(lambda x: x.isupper(), dict(ret).keys())
+
 
     test('ACD')
 
