@@ -1019,19 +1019,39 @@ def NVI(prices):
     :param prices:
     :return:
     """
+    # TODO:性能稍差与其他程序，很难向量化，jit优化更耗时
     assert prices is not None
     _assert_greater_or_equal(len(prices), 1)
 
-    df_price = prices.copy()
-    df_price = df_price.sort_index(ascending=True)
-    df_price['close1'] = df_price['close'].shift(1)
-    df_price['volume1'] = df_price['volume'].shift(1)
-    N = len(prices)
-    nvi = np.zeros(shape=(N,), dtype=np.float64)
-    nvi[0] = 1000
-    for ind in range(1, N):
-        nvi[ind] = nvi[ind - 1] - (df_price['close'] - df_price['close1'])[ind] / df_price['close1'][
-            ind] * nvi[ind - 1] if df_price['volume'][ind] < df_price['volume1'][ind] else nvi[ind - 1]
+    # df_price = prices.copy()
+    df_price = prices.sort_index(ascending=True)
+
+    close, volume = df_price[['close', 'volume']].T.values
+
+    close1 = inp.shift(close, 1, order=0, cval=np.nan)
+    volume1 = inp.shift(volume, 1, order=0, cval=np.nan)
+
+    N = len(df_price)
+    # nvi = np.empty(shape=close1.shape)
+
+    # @jit
+    def __nvi(N, close, close1, volume, volume1):
+        nvi = np.empty(shape=close1.shape)
+        nvi[0] = 1000
+        for ind in range(1, N):
+            nvi[ind] = nvi[ind - 1] - (close - close1)[ind] / close1[
+                ind] * nvi[ind - 1] if volume[ind] < volume1[ind] else nvi[ind - 1]
+        return nvi
+
+    nvi = __nvi(N, close, close1, volume, volume1)
+    # df_price['close1'] = df_price['close'].shift(1)
+    # df_price['volume1'] = df_price['volume'].shift(1)
+    # N = len(prices)
+    # nvi = np.zeros(shape=(N,), dtype=np.float64)
+    # nvi[0] = 1000
+    # for ind in range(1, N):
+    #     nvi[ind] = nvi[ind - 1] - (df_price['close'] - df_price['close1'])[ind] / df_price['close1'][
+    #         ind] * nvi[ind - 1] if df_price['volume'][ind] < df_price['volume1'][ind] else nvi[ind - 1]
 
     nvi = pd.Series(nvi, index=df_price.index)
     return nvi
@@ -2307,7 +2327,7 @@ if __name__ == '__main__':
         return filter(lambda x: x.isupper(), dict(ret).keys())
 
 
-    test('ACD')
+    test('NVI')
 
     # print count_function_number()
     # print len(count_function_number())
