@@ -1405,51 +1405,62 @@ def RVI(prices, timeperiod1=10, timeperiod2=14):
     N1 = timeperiod1
     N2 = timeperiod2
 
+    STD = ta.STDDEV
+
     def _UM(price, N1):
-        df_price[price + str(1)] = df_price[price].shift(1)
-        STD = pd.rolling_std
-        std_price_n1 = 'std_' + price + '_' + str(N1)
-        df_price[std_price_n1] = STD(df_price[price], N1)
+        price1 = inp.shift(price, 1, order=0, cval=np.nan)
+        cond1 = price > price1
+        um = np.zeros(shape=price1.shape)
+        um[cond1] = STD(price, N1)[cond1]
+        # return std
+        # df_price[price + str(1)] = df_price[price].shift(1)
+        # STD = pd.rolling_std
+        # std_price_n1 = 'std_' + price + '_' + str(N1)
+        # df_price[std_price_n1] = STD(df_price[price], N1)
 
-        def func(row):
-            return row[std_price_n1] if row[price] > row[price + str(1)] else 0
-
-        um = df_price.apply(
-            func, axis=1
-        )
+        # def func(row):
+        #     return row[std_price_n1] if row[price] > row[price + str(1)] else 0
+        #
+        # um = df_price.apply(
+        #     func, axis=1
+        # )
         um[:N1] = np.nan
         # print('um={0}'.format(um))
         return um
 
     def _DM(price, N1):
-        df_price[price + str(1)] = df_price[price].shift(1)
-        STD = pd.rolling_std
-        std_price_n1 = 'std_' + price + '_' + str(N1)
-        df_price[std_price_n1] = STD(df_price[price], N1)
+        # df_price[price + str(1)] = df_price[price].shift(1)
+        # STD = pd.rolling_std
+        # std_price_n1 = 'std_' + price + '_' + str(N1)
+        # df_price[std_price_n1] = STD(df_price[price], N1)
+        #
+        # def func(row):
+        #     return row[std_price_n1] if row[price] < row[price + str(1)] else 0
 
-        def func(row):
-            return row[std_price_n1] if row[price] < row[price + str(1)] else 0
-
-        dm = df_price.apply(
-            func, axis=1
-        )
+        price1 = inp.shift(price, 1, order=0, cval=np.nan)
+        dm = np.zeros(shape=price1.shape)
+        cond = price < price1
+        dm[cond] = STD(price, N1)[cond]
+        # dm = df_price.apply(
+        #     func, axis=1
+        # )
         dm[:N1] = np.nan
         # print('dm={0}'.format(dm))
         return dm
 
     def _UA(price, N1, N2):
-        ua = np.zeros_like(df_price[price])
+        ua = np.zeros_like(price)
         um = _UM(price, N1)
         SMA = ta.SMA
 
         ua[:(N1 + N2)] = np.nan
 
-        sma_um_n2 = SMA(um.values.astype(float), N2)
+        sma_um_n2 = SMA(um, N2)
         ua[(N1 + N2)] = sma_um_n2[(N1 + N2)]
 
-        for ind in range((N1 + N2 + 1), len(df_price)):
+        for ind in range((N1 + N2 + 1), len(price)):
             ua[ind] = (ua[ind - 1] * (N2 - 1) + um[ind]) / N2
-        ua = pd.Series(ua, index=um.index)
+        # ua = pd.Series(ua, index=um.index)
         # print('ua={0}'.format(ua))
         return ua
 
@@ -1458,29 +1469,36 @@ def RVI(prices, timeperiod1=10, timeperiod2=14):
         SMA = ta.SMA
 
         dm_n1 = _DM(price, N1)
-        da = np.zeros_like(df_price[price])
+        da = np.zeros_like(price)
         da[:(N1 + N2)] = np.nan
-        sma_dm_n2 = SMA(dm_n1.values.astype(float), N2)
+        sma_dm_n2 = SMA(dm_n1, N2)
         da[(N1 + N2)] = sma_dm_n2[(N1 + N2)]
-        for ind in range((N1 + N2 + 1), len(df_price)):
+        for ind in range((N1 + N2 + 1), len(price)):
             da[ind] = (da[ind - 1] * (N2 - 1) + dm_n1[ind]) / N2
         # print('da={0}'.format(da))
-        da = pd.Series(da, index=dm_n1.index)
+        # da = pd.Series(da, index=dm_n1.index)
         return da
 
     def _RS(price):
         ua = _UA(price, N1, N2)
         da = _DA(price, N1, N2)
         # rs = ua / (ua + da) * 100
-        rs = np.zeros_like(ua)
-        for ind in range(len(ua)):
-            rs[ind] = ua[ind] / (ua[ind] + da[ind]) * 100 if not np.isclose((ua[ind] + da[ind]), 0) else 0
-        rs = pd.Series(rs, index=ua.index)
+        # rs = np.zeros_like(ua)
+        rs = ua / (ua + da) * 100
+        inf_idx = np.isinf(rs)
+        rs[inf_idx] = 0
+
+        # for ind in range(len(ua)):
+        #     rs[ind] = ua[ind] / (ua[ind] + da[ind]) * 100 if not np.isclose((ua[ind] + da[ind]), 0) else 0
+        # rs = pd.Series(rs, index=ua.index)
         return rs
 
-    df_price['RVI'] = (_RS('high') + _RS('low')) / 2
+    high, low = df_price[['high', 'low']].T.values
 
-    return df_price['RVI']
+    rvi = (_RS(high) + _RS(low)) / 2
+    # df_price['RVI'] = (_RS('high') + _RS('low')) / 2
+
+    return pd.Series(rvi, index=df_price.index)
 
 
 def SMI(prices, timeperiod1=10, timeperiod2=3, timeperiod3=3):
@@ -2358,7 +2376,7 @@ if __name__ == '__main__':
         return filter(lambda x: x.isupper(), dict(ret).keys())
 
 
-    test('NVI')
+    test('RVI')
 
     # print count_function_number()
     # print len(count_function_number())
