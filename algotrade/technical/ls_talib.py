@@ -1316,19 +1316,35 @@ def RMI(prices, timeperiod1=5, timeperiod2=14):
 
     N1 = timeperiod1
     N2 = timeperiod2
-    close = df_price['close'].values
-    close_n1 = df_price['close'].shift(N1).values
 
-    um_n1 = np.zeros_like(close, dtype=float)
-    for idx in xrange(len(um_n1)):
-        if close[idx] > close_n1[idx]:
-            um_n1[idx] = close[idx] - close_n1[idx]
-        else:
-            um_n1[idx] = 0.0
+    close = df_price['close'].values.astype(float)
+    close_n1 = inp.shift(close, N1, order=0, cval=np.nan)
 
-    dm_n1 = np.zeros_like(close)
-    for idx in xrange(len(dm_n1)):
-        dm_n1[idx] = close_n1[idx] - close[idx] if close[idx] < close_n1[idx] else 0.0
+    # um, dm
+    cond1 = close > close_n1
+    um_n1 = np.zeros(shape=close.shape)
+    um_n1[cond1] = close[cond1] - close_n1[cond1]
+    um_n1[np.isnan(close_n1)] = np.nan
+
+    cond2 = close < close_n1
+    dm_n1 = np.zeros(shape=close_n1.shape)
+    dm_n1[cond2] = close_n1[cond2] - close[cond2]
+    dm_n1[np.isnan(close_n1)] = np.nan
+
+
+    # close = df_price['close'].values
+    # close_n1 = df_price['close'].shift(N1).values
+    #
+    # um_n1 = np.zeros_like(close, dtype=float)
+    # for idx in xrange(len(um_n1)):
+    #     if close[idx] > close_n1[idx]:
+    #         um_n1[idx] = close[idx] - close_n1[idx]
+    #     else:
+    #         um_n1[idx] = 0.0
+    #
+    # dm_n1 = np.zeros_like(close)
+    # for idx in xrange(len(dm_n1)):
+    #     dm_n1[idx] = close_n1[idx] - close[idx] if close[idx] < close_n1[idx] else 0.0
 
     ua = np.zeros_like(close, dtype=float)
     da = np.zeros_like(close, dtype=float)
@@ -1345,10 +1361,14 @@ def RMI(prices, timeperiod1=5, timeperiod2=14):
         ua[ind] = (ua[ind - 1] * (N2 - 1) + um_n1[ind]) / N2
         da[ind] = (da[ind - 1] * (N2 - 1) + dm_n1[ind]) / N2
 
-    rmi = np.zeros_like(close, dtype=float)
+    # rmi = np.zeros_like(close, dtype=float)
+    #
+    # for idx in xrange(len(rmi)):
+    #     rmi[idx] = ua[idx] / (ua[idx] + da[idx]) * 100 if not np.isclose(ua[idx] + da[idx], 0) else 50
 
-    for idx in xrange(len(rmi)):
-        rmi[idx] = ua[idx] / (ua[idx] + da[idx]) * 100 if not np.isclose(ua[idx] + da[idx], 0) else 50
+    rmi = ua / (ua + da) * 100
+    inf_idx = np.isinf(rmi)
+    rmi[inf_idx] = 50
 
     rmi = pd.Series(rmi, index=df_price.index)
     return rmi
