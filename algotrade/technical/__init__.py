@@ -18,6 +18,7 @@ from .ls_talib import UI
 # from .ls_talib import UPN
 from .ls_talib import VAMA, VHF, VIDYA, VMACD, VO, VOSC, VR, VROC, VRSI
 from .ls_talib import WAD, WC
+import talib.abstract
 
 __all__ = ['ACC',
            'ACD',
@@ -66,4 +67,4 @@ __all__ = ['ACC',
            'VROC',
            'VRSI',
            'WAD',
-           'WC']
+           'WC'] + filter(lambda x: x.isupper() and not x.startswith('_'), dir(talib.abstract))
