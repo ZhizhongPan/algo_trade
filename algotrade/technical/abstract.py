@@ -10,7 +10,7 @@ import numpy as np
 
 import ls_talib
 
-FUNCTION_NAMES = ls_talib.__all__
+_LS_FUNCTION_NAMES = set(ls_talib.__all__)
 
 
 # TODO: 遇到问题：如果用jit修饰后，无法用inspect获得默认参数
@@ -26,7 +26,7 @@ class Function(ab.Function):
         # self.__opt_inputs = OrderedDict()
         # self.__info = None
 
-        if self.__name in FUNCTION_NAMES:
+        if self.__name in _LS_FUNCTION_NAMES:
             pass
             # self.parameters = {}
         else:
@@ -41,7 +41,7 @@ class Function(ab.Function):
         if not self.parameters:
             self.parameters.update(**kwargs)
 
-        if self.__name in FUNCTION_NAMES:
+        if self.__name in _LS_FUNCTION_NAMES:
             func = ls_talib.__getattribute__(self.__name)
             return func(*args, **kwargs)
         else:
@@ -49,21 +49,21 @@ class Function(ab.Function):
 
     @property
     def parameters(self):
-        if self.__name in FUNCTION_NAMES:
+        if self.__name in _LS_FUNCTION_NAMES:
             return self.__parameters
         else:
             return super(Function, self).parameters
 
     @parameters.setter
     def parameters(self, parameters):
-        if self.__name in FUNCTION_NAMES:
+        if self.__name in _LS_FUNCTION_NAMES:
             self.__parameters.update(parameters)
         else:
             super(Function, self).set_parameters(parameters)
 
     @property
     def lookback(self):
-        if self.__name in FUNCTION_NAMES:
+        if self.__name in _LS_FUNCTION_NAMES:
             kwargs = self.parameters if self.parameters else self.__get_default_args(self.__name)
             return self.__lookback(self.__name, **kwargs)
         else:
@@ -160,7 +160,7 @@ class Function(ab.Function):
 
 
 def test_ls_talib():
-    for func_name in FUNCTION_NAMES:
+    for func_name in _LS_FUNCTION_NAMES:
         dict_param = dict(
             timeperiod=np.random.randint(10, 100, 1)[0],
             timeperiod1=np.random.randint(10, 100, 1)[0],
@@ -198,6 +198,11 @@ def test_talib():
     # print(len(func_names))
 
 
+for name in _LS_FUNCTION_NAMES:
+    exec "%s = Function('%s')" % (name, name)
+
+__all__ = ['Function'] + list(_LS_FUNCTION_NAMES)
+
 if __name__ == '__main__':
 
     aroon = Function('AROON')
@@ -209,5 +214,5 @@ if __name__ == '__main__':
     p = p.astype(float)
 
     # print(rmi(p))
-    # test_ls_talib()
-    test_talib()
+    test_ls_talib()
+    # test_talib()
