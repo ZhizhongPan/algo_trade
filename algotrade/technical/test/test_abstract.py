@@ -4,10 +4,11 @@
 __author__ = 'phil.zhang'
 
 import pandas as pd
-from numpy.testing.utils import (assert_array_almost_equal,assert_allclose)
-from algotrade.technical.abstract import Function
-import algotrade.technical.ls_talib_benchmark as benchmark
+from numpy.testing.utils import (assert_array_almost_equal)
 import talib
+
+from algotrade.technical.abstract import Function
+
 
 def test_Function():
     p = pd.read_csv('../../orcl-2000.csv', index_col=[0], parse_dates=True)
