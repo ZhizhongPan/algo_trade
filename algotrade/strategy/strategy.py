@@ -11,6 +11,7 @@ from algotrade.event_engine import Event
 from algotrade.technical.utils import (get_ta_functions, get_default_args, num_bars_to_accumulate)
 from algotrade.barfeed import CSVBarFeed
 from algotrade.broker import BaseBroker
+from algotrade import const
 
 __author__ = 'phil.zhang'
 
@@ -130,17 +131,115 @@ class BaseStrategy:
     def __update_data_frame(self, minibar):
         self.dataframe[self.dataframe.index[-1]] = minibar
 
-    def market_order(self):
-        pass
+    def limit_order(self, instrument, limit_price, quantity, good_till_canceled=False, all_or_none=False):
+        """Submits a limit order.
 
-    def limit_order(self):
-        pass
+        :param instrument: Instrument identifier.
+        :type instrument: string.
+        :param limit_price: Limit price.
+        :type limit_price: float.
+        :param quantity: The amount of shares. Positive means buy, negative means sell.
+        :type quantity: int/float.
+        :param good_till_canceled: True if the order is good till canceled. If False then the order gets automatically canceled when the session closes.
+        :type good_till_canceled: boolean.
+        :param all_or_none: True if the order should be completely filled or not at all.
+        :type all_or_none: boolean.
+        :rtype: The :class:`chinascope_algotrade.broker.LimitOrder` submitted.
+        """
 
-    def stop_order(self):
-        pass
+        ret = None
+        if quantity > 0:
+            ret = self.broker.create_limit_order(const.OrderAction.BUY, instrument, limit_price, quantity)
+        elif quantity < 0:
+            ret = self.broker.create_limit_order(const.OrderAction.SELL, instrument, limit_price, quantity * -1)
+        if ret:
+            ret.setGoodTillCanceled(good_till_canceled)
+            ret.setAllOrNone(all_or_none)
+            self.broker.submit_order(ret)
+        return ret
 
-    def stop_limit_order(self):
-        pass
+    def stop_order(self, instrument, stop_price, quantity, good_till_canceled=False, all_or_none=False):
+        """Submits a stop order.
+
+        :param instrument: Instrument identifier.
+        :type instrument: string.
+        :param stop_price: Stop price.
+        :type stop_price: float.
+        :param quantity: The amount of shares. Positive means buy, negative means sell.
+        :type quantity: int/float.
+        :param good_till_canceled: True if the order is good till canceled. If False then the order gets automatically canceled when the session closes.
+        :type good_till_canceled: boolean.
+        :param all_or_none: True if the order should be completely filled or not at all.
+        :type all_or_none: boolean.
+        :rtype: The :class:`chinascope_algotrade.broker.StopOrder` submitted.
+        """
+
+        ret = None
+        if quantity > 0:
+            ret = self.broker.create_stop_order(const.OrderAction.BUY, instrument, stop_price, quantity)
+        elif quantity < 0:
+            ret = self.broker.create_stop_order(const.OrderAction.SELL, instrument, stop_price, quantity * -1)
+        if ret:
+            ret.setGoodTillCanceled(good_till_canceled)
+            ret.setAllOrNone(all_or_none)
+            self.broker.submit_order(ret)
+        return ret
+
+    def stop_limit_order(self, instrument, stop_price, limit_price, quantity, good_till_canceled=False, all_or_none=False):
+        """Submits a stop limit order.
+
+        :param instrument: Instrument identifier.
+        :type instrument: string.
+        :param stop_price: Stop price.
+        :type stop_price: float.
+        :param limit_price: Limit price.
+        :type limit_price: float.
+        :param quantity: The amount of shares. Positive means buy, negative means sell.
+        :type quantity: int/float.
+        :param good_till_canceled: True if the order is good till canceled. If False then the order gets automatically canceled when the session closes.
+        :type good_till_canceled: boolean.
+        :param all_or_none: True if the order should be completely filled or not at all.
+        :type all_or_none: boolean.
+        :rtype: The :class:`chinascope_algotrade.broker.StopLimitOrder` submitted.
+        """
+
+        ret = None
+        if quantity > 0:
+            ret = self.broker.create_stop_limit_order(const.OrderAction.BUY, instrument, stop_price, limit_price, quantity)
+        elif quantity < 0:
+            ret = self.broker.create_stop_limit_order(const.OrderAction.SELL, instrument, stop_price, limit_price, quantity * -1)
+        if ret:
+            ret.setGoodTillCanceled(good_till_canceled)
+            ret.setAllOrNone(all_or_none)
+            self.broker.submit_order(ret)
+        return ret
+
+    def market_order(self, instrument, quantity, on_close=False, good_till_canceled=False, all_or_none=False):
+        """Submits a market order.
+
+        :param instrument: Instrument identifier.
+        :type instrument: string.
+        :param quantity: The amount of shares. Positive means buy, negative means sell.
+        :type quantity: int/float.
+        :param on_close: True if the order should be filled as close to the closing price as possible (Market-On-Close order). Default is False.
+        :type on_close: boolean.
+        :param good_till_canceled: True if the order is good till canceled. If False then the order gets automatically canceled when the session closes.
+        :type good_till_canceled: boolean.
+        :param all_or_none: True if the order should be completely filled or not at all.
+        :type all_or_none: boolean.
+        :rtype: The :class:`chinascope_algotrade.broker.MarketOrder` submitted.
+        """
+
+        ret = None
+        if quantity > 0:
+            ret = self.broker.create_market_order(const.OrderAction.BUY, instrument, quantity, on_close)
+        elif quantity < 0:
+            ret = self.broker.create_market_order(const.OrderAction.SELL, instrument, quantity * -1, on_close)
+        if ret:
+            ret.setGoodTillCanceled(good_till_canceled)
+            ret.setAllOrNone(all_or_none)
+            self.broker.submit_order(ret)
+        return ret
 
     def enter_long(self):
         pass
@@ -169,6 +268,9 @@ class FixedPeriodStrategy(BaseStrategy):
         self.current_code_list = code_list
         self.to_sell = self.previous_code_list - self.current_code_list
         self.to_buy = self.current_code_list - self.previous_code_list
+
+    def on_bar(self, event):
+        pass
 
 
 def main():
