@@ -15,10 +15,11 @@ class Bar(object):
         '__volume',
         '__adj_close',
         '__frequency',
+        '__instrument',
         '__use_adjusted_value'
     )
 
-    def __init__(self, date_time=None, open_=None, high=None, low=None, close=None, volume=None, adj_close=None, frequency=None):
+    def __init__(self, date_time=None, open_=None, high=None, low=None, close=None, volume=None, adj_close=None, frequency=None, instrument=None):
         if high < low:
             raise Exception("high < low on %s" % date_time)
         elif high < open_:
@@ -38,10 +39,11 @@ class Bar(object):
         self.__volume = volume
         self.__adj_close = adj_close
         self.__frequency = frequency
+        self.__instrument = instrument
         self.__use_adjusted_value = False
 
     def __repr__(self):
-        return 'Bar({date_time},{open},{high},{low},{close},{volume},{adj_close},{frequency})'.format(
+        return 'Bar({date_time},{open},{high},{low},{close},{volume},{adj_close},{frequency},{instrument})'.format(
             date_time=self.__date_time,
             open=self.__open,
             high=self.__high,
@@ -49,10 +51,11 @@ class Bar(object):
             close=self.__close,
             volume=self.__volume,
             adj_close=self.__adj_close,
-            frequency=self.__frequency)
+            frequency=self.__frequency,
+            instrument=self.__instrument)
 
     def __str__(self):
-        return '{date_time},{open},{high},{low},{close},{volume},{adj_close},{frequency}'.format(
+        return '{date_time},{open},{high},{low},{close},{volume},{adj_close},{frequency},{instrument}'.format(
             date_time=self.__date_time,
             open=self.__open,
             high=self.__high,
@@ -60,7 +63,8 @@ class Bar(object):
             close=self.__close,
             volume=self.__volume,
             adj_close=self.__adj_close,
-            frequency=self.__frequency)
+            frequency=self.__frequency,
+            instrument=self.__instrument)
 
     def __setstate__(self, state):
         (self.__date_time,
@@ -71,6 +75,7 @@ class Bar(object):
          self.__volume,
          self.__adj_close,
          self.__frequency,
+         self.__instrument,
          self.__use_adjusted_value) = state
 
     def __getstate__(self):
@@ -83,6 +88,7 @@ class Bar(object):
             self.__volume,
             self.__adj_close,
             self.__frequency,
+            self.__instrument,
             self.__use_adjusted_value
         )
 
@@ -118,14 +124,19 @@ class Bar(object):
     def frequency(self):
         return self.__frequency
 
+    @property
+    def instrument(self):
+        return self.__instrument
+
     def values(self):
         return {
-            'date_time': self.date_time,
-            'open'     : self.open,
-            'high'     : self.high,
-            'low'      : self.low,
-            'close'    : self.close,
-            'adj_close': self.adj_close,
-            'volume'   : self.volume,
-            'frequency': self.frequency
+            'date_time' : self.date_time,
+            'open'      : self.open,
+            'high'      : self.high,
+            'low'       : self.low,
+            'close'     : self.close,
+            'adj_close' : self.adj_close,
+            'volume'    : self.volume,
+            'frequency' : self.frequency,
+            'instrument': self.instrument
         }
