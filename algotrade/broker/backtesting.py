@@ -22,7 +22,7 @@ from abc import abstractmethod, ABCMeta
 from algotrade import const
 import six
 
-from algotrade import broker
+from algotrade.broker import broker
 # from algotrade.broker import fillstrategy
 # from algotrade import warninghelpers
 # from chinascope_algotrade import logger
@@ -205,7 +205,7 @@ class BackTestingBroker(broker.BaseBroker):
         self.__shares = {}
         self.__active_orders = {}
         self.__use_adjustedValues = False
-        # self.__fillStrategy = fillstrategy.DefaultStrategy()
+        # self.__fill_strategy = fillstrategy.DefaultStrategy()
         # self.__logger = logger.logger(BackTestingBroker.LOGGER_NAME)
 
         # It is VERY important that the broker subscribes to barfeed events before the strategy.
@@ -276,12 +276,12 @@ class BackTestingBroker(broker.BaseBroker):
     @property
     def fill_strategy(self):
         """Returns the :class:`chinascope_algotrade.broker.fillstrategy.FillStrategy` currently set."""
-        return self.__fillStrategy
+        return self.__fill_strategy
 
     @fill_strategy.setter
     def fill_strategy(self, strategy):
         """Sets the :class:`chinascope_algotrade.broker.fillstrategy.FillStrategy` to use."""
-        self.__fillStrategy = strategy
+        self.__fill_strategy = strategy
 
     @property
     def use_adjusted_values(self):
@@ -306,9 +306,9 @@ class BackTestingBroker(broker.BaseBroker):
             ret = [order for order in self.__active_orders.values() if order.instrument == instrument]
         return ret
 
-    def getPendingOrders(self):
+    def get_pending_orders(self):
         # warninghelpers.deprecation_warning(
-        #     "getPendingOrders will be deprecated in the next version. Please use active_orders instead.",
+        #     "get_pending_orders will be deprecated in the next version. Please use active_orders instead.",
         #     stacklevel=2
         # )
         return self.active_orders()
@@ -382,7 +382,7 @@ class BackTestingBroker(broker.BaseBroker):
                 self.__shares[order.instrument] = updated_shares
 
             # Let the strategy know that the order was filled.
-            self.__fillStrategy.onOrderFilled(self, order)
+            self.__fill_strategy.onOrderFilled(self, order)
 
             # Notify the order update
             if order.is_filled:
@@ -443,7 +443,7 @@ class BackTestingBroker(broker.BaseBroker):
                 order.switch_state(broker.BaseOrder.State.CANCELED)
                 self.notify_order_event(broker.OrderEvent(order, broker.OrderEvent.Type.CANCELED, "Expired"))
 
-    def __processOrder(self, order, bar_):
+    def __process_order(self, order, bar_):
         if not self.__pre_process_order(order, bar_):
             return
 
@@ -468,7 +468,7 @@ class BackTestingBroker(broker.BaseBroker):
 
             if order.is_active:
                 # This may trigger orders to be added/removed from __active_orders.
-                self.__processOrder(order, bar_)
+                self.__process_order(order, bar_)
             else:
                 # If an order is not active it should be because it was canceled in this same loop and it should
                 # have been removed.
@@ -477,7 +477,7 @@ class BackTestingBroker(broker.BaseBroker):
 
     def on_bars(self, date_time, bars):
         # Let the fill strategy know that new bars are being processed.
-        self.__fillStrategy.on_bars(self, bars)
+        self.__fill_strategy.on_bars(self, bars)
 
         # This is to froze the orders that will be processed in this event, to avoid new getting orders introduced
         # and processed on this very same event.
@@ -487,26 +487,26 @@ class BackTestingBroker(broker.BaseBroker):
             # This may trigger orders to be added/removed from __active_orders.
             self.__on_bars_Impl(order, bars)
 
-    def start(self):
-        pass
-
-    def stop(self):
-        pass
-
-    def join(self):
-        pass
-
-    def eof(self):
-        # If there are no more events in the barfeed, then there is nothing left for us to do since all processing took
-        # place while processing barfeed events.
-        return self.__barfeed.eof()
-
-    def dispatch(self):
-        # All events were already emitted while handling barfeed events.
-        pass
-
-    def peek_datetime(self):
-        return None
+    # def start(self):
+    #     pass
+    #
+    # def stop(self):
+    #     pass
+    #
+    # def join(self):
+    #     pass
+    #
+    # def eof(self):
+    #     # If there are no more events in the barfeed, then there is nothing left for us to do since all processing took
+    #     # place while processing barfeed events.
+    #     return self.__barfeed.eof()
+    #
+    # def dispatch(self):
+    #     # All events were already emitted while handling barfeed events.
+    #     pass
+    #
+    # def peek_datetime(self):
+    #     return None
 
     def create_market_order(self, action, instrument, quantity, on_close=False):
         # In order to properly support market-on-close with intraday feeds I'd need to know about different

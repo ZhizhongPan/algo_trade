@@ -21,8 +21,8 @@
 import math
 
 from algotrade import stratanalyzer
-from algotrade import observer
-from algotrade import dataseries
+# from algotrade import observer
+# from algotrade import dataseries
 
 
 # Helper class to calculate time-weighted returns in a portfolio.

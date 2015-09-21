@@ -8,3 +8,5 @@ import scipy as sp
 import matplotlib.pyplot as plt
 import pandas as pd
 from broker import BaseBroker
+from algotrade.broker.backtesting import BackTestingBroker
+from algotrade.broker.backtesting import MarketOrder

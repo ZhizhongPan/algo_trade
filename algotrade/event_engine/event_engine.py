@@ -10,7 +10,7 @@ from numba import jit
 
 # 自己开发的模块
 # from eventType import *
-from algotrade.const import EVENT_TYPE
+from algotrade.const import EventType
 
 
 ########################################################################
@@ -103,7 +103,7 @@ class EventEngine:
     def __on_timer(self):
         """向事件队列中存入计时器事件"""
         # 创建计时器事件
-        event = Event(type_=EVENT_TYPE.EVENT_TIMER)
+        event = Event(type_=EventType.EVENT_TIMER)
 
         # 向队列中存入计时器事件
         self.put(event)
@@ -207,7 +207,7 @@ def test():
 
     ee = EventEngine()
     # ee.register(EVENT_TIMER, simple_test)
-    ee.register(EVENT_TYPE.EVENT_TIMER, simple_test)
+    ee.register(EventType.EVENT_TIMER, simple_test)
     ee.start()
 
     app.exec_()

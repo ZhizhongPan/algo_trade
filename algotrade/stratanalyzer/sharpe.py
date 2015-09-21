@@ -20,7 +20,7 @@
 
 import math
 
-from algotrade import stratanalyzer
+from algotrade.stratanalyzer.strategy_analyzer import StrategyAnalyzer
 from algotrade.stratanalyzer import returns
 from algotrade.utils import stats
 
@@ -80,7 +80,7 @@ def sharpe_ratio_2(returns, riskFreeRate, firstDateTime, lastDateTime, annualize
     return ret
 
 
-class SharpeRatio(stratanalyzer.StrategyAnalyzer):
+class SharpeRatio(StrategyAnalyzer):
     """A :class:`chinascope_algotrade.stratanalyzer.StrategyAnalyzer` that calculates
     Sharpe ratio for the whole portfolio.
 

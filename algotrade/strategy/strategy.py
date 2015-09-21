@@ -4,13 +4,15 @@ import inspect
 
 import pandas as pd
 import concurrent.futures
+import numpy as np
+from numpy.testing.utils import assert_almost_equal
 
 import algotrade.technical as lsta
-from algotrade.const import EVENT_TYPE
+from algotrade.const import EventType
 from algotrade.event_engine import Event
 from algotrade.technical.utils import (get_ta_functions, get_default_args, num_bars_to_accumulate)
 from algotrade.barfeed import CSVBarFeed
-from algotrade.broker import BaseBroker
+from algotrade.broker import BackTestingBroker
 from algotrade import const
 
 __author__ = 'phil.zhang'
@@ -30,12 +32,12 @@ def merge_dicts(*dict_args):
 
 class BaseStrategy:
     def __init__(self, barfeed, broker, ta_factors=None):
-        self.__barfeed = barfeed
-        self.__broker = broker
+        self.barfeed = barfeed
+        self.broker = broker
         self.__ta_factors = ta_factors
         self.dataframe = pd.DataFrame()
         self.event_engine = barfeed.event_engine
-        self.event_engine.register(EVENT_TYPE.EVENT_BAR_ARRIVE, self.on_bar)
+        self.event_engine.register(EventType.EVENT_BAR_ARRIVE, self.on_bar)
         #: TODO: 添加talib里面的函数
         self.func_lib = merge_dicts(inspect.getmembers(lsta, inspect.isfunction), get_ta_functions())
 
@@ -45,7 +47,7 @@ class BaseStrategy:
         try:
             while True:
                 self.event_engine.put(
-                    Event(EVENT_TYPE.EVENT_BAR_ARRIVE, gen.next()))
+                    Event(EventType.EVENT_BAR_ARRIVE, gen.next()))
                 self.event_engine.run()
         except StopIteration:
             self.on_finish()
@@ -249,28 +251,51 @@ class BaseStrategy:
 
 
 class FixedPeriodStrategy(BaseStrategy):
-    def __init__(self, barfeed=None, broker=None, tafactors=None):
-        super(FixedPeriodStrategy).__init__(barfeed, broker, tafactors)
-        self.previous_code_list = set()
-        self.current_code_list = set()
+    def __init__(self, barfeed=None, broker=None, initial_code_list=None):
+        super(FixedPeriodStrategy).__init__(barfeed, broker, tafactors=None)
+        self.previous_code_list = set(initial_code_list.keys())
+        self.current_code_list = set(initial_code_list.keys())
         self.to_sell = set()
         self.to_buy = set()
+        # self.event_engine.register
 
-    def on_code_list_arrive(self, code_list):
+    def on_code_list_arrive(self, code_list_dict):
         """
 
-        :param code_list: a set,containing code to buy
+        :param code_list: a dict,containing codes to buy,and its weights
         :return:
         """
-        code_list = set(code_list)
+        code_list = set(code_list_dict.keys())
+
+        assert_almost_equal(1, np.sum(code_list_dict.values()))
 
         self.previous_code_list = self.current_code_list
         self.current_code_list = code_list
-        self.to_sell = self.previous_code_list - self.current_code_list
-        self.to_buy = self.current_code_list - self.previous_code_list
+        codes_to_sell = self.previous_code_list - self.current_code_list
+        codes_to_buy = self.current_code_list - self.previous_code_list
+        codes_not_changed = self.previous_code_list & self.current_code_list
+
+        total = self.broker.total
+
+        for code in codes_not_changed:
+            share = self.broker.shares[code]
+
+            # share 比例过大，sell
+            if share / total > code_list_dict[code]:
+                self.to_sell.add(
+                    self.broker.create_market_order(action=const.OrderAction.SELL, instrument=code, quantity=share - code_list_dict[code] * total))
+            # 买进
+            elif share / total < code_list_dict[code]:
+                self.to_buy.add(
+                    self.broker.create_market_order(action=const.OrderAction.BUY, instrument=code, quantity=code_list_dict[code] * total - share))
+
+        for code in codes_to_sell:
+            self.to_sell.add(
+                self.broker.create_market_order(action=const.OrderAction.SELL, instrument=code, quantity=self.broker.shares[code]))
 
     def on_bar(self, event):
-        pass
+        type_, msg = event
+        print type_, event
 
 
 def main():
@@ -292,10 +317,10 @@ def main():
         ('ULTOSC', {}),
         ('OBV', {})
     ]
-    barfeed = CSVBarFeed()
-    barfeed.load_data_from_csv('../orcl-2000.csv')
-    broker = BaseBroker()
-    my_strategy = BaseStrategy(barfeed, broker, ta_fac1)
+    barfeed = CSVBarFeed(['orcl_2000', 'orcl_2000_copy'])
+    barfeed.load_data_from_csv('../')
+    broker = BackTestingBroker(cash=10000, barfeed=barfeed)
+    my_strategy = FixedPeriodStrategy(barfeed=barfeed, broker=broker)
     import time
     t = time.time()
     my_strategy.run()

@@ -14,7 +14,7 @@ from algotrade.barfeed import BaseBarFeed
 from algotrade.vnctpmd import MdApi
 from algotrade.vnctptd import TdApi
 from algotrade.event_engine import Event
-from algotrade.const import EVENT_TYPE
+from algotrade.const import EventType
 from ctp_data_type import defineDict
 
 
@@ -75,7 +75,7 @@ class RealTimeBarFeed(Meta_MdApi_BaseBarFeed):
 
     def on_front_connected(self):
         """服务器连接"""
-        event = Event(type_=EVENT_TYPE.EVENT_TYPE.EVENT_LOG)
+        event = Event(type_=EventType.EVENT_TYPE.EVENT_LOG)
         event.dict_['log'] = u'行情服务器连接成功'
         self.__event_engine.put(event)
 
@@ -91,7 +91,7 @@ class RealTimeBarFeed(Meta_MdApi_BaseBarFeed):
     # ----------------------------------------------------------------------
     def on_front_disconnected(self, n):
         """服务器断开"""
-        event = Event(type_=EVENT_TYPE.EVENT_LOG)
+        event = Event(type_=EventType.EVENT_LOG)
         event.dict_['log'] = u'行情服务器连接断开'
         self.__event_engine.put(event)
 
@@ -104,7 +104,7 @@ class RealTimeBarFeed(Meta_MdApi_BaseBarFeed):
     # ----------------------------------------------------------------------
     def on_rsp_error(self, error, n, last):
         """错误回报"""
-        event = Event(type_=EVENT_TYPE.EVENT_LOG)
+        event = Event(type_=EventType.EVENT_LOG)
         log = u'行情错误回报，错误代码：' + \
               unicode(error['ErrorID']) + u',' + u'错误信息：' + \
               error['ErrorMsg'].decode('gbk')
@@ -114,7 +114,7 @@ class RealTimeBarFeed(Meta_MdApi_BaseBarFeed):
     # ----------------------------------------------------------------------
     def on_rsp_user_login(self, data, error, n, last):
         """登陆回报"""
-        event = Event(type_=EVENT_TYPE.EVENT_LOG)
+        event = Event(type_=EventType.EVENT_LOG)
 
         if error['ErrorID'] == 0:
             log = u'行情服务器登陆成功'
@@ -134,7 +134,7 @@ class RealTimeBarFeed(Meta_MdApi_BaseBarFeed):
     # ----------------------------------------------------------------------
     def on_rsp_user_logout(self, data, error, n, last):
         """登出回报"""
-        event = Event(type_=EVENT_TYPE.EVENT_LOG)
+        event = Event(type_=EventType.EVENT_LOG)
 
         if error['ErrorID'] == 0:
             log = u'行情服务器登出成功'
@@ -170,13 +170,13 @@ class RealTimeBarFeed(Meta_MdApi_BaseBarFeed):
         # 行情推送收到后，同时触发常规行情事件，以及特定合约行情事件，用于满足不同类型的监听
 
         # 常规行情事件
-        event1 = Event(type_=EVENT_TYPE.EVENT_MARKET_DATA)
+        event1 = Event(type_=EventType.EVENT_MARKET_DATA)
         event1.dict_['data'] = data
         self.__event_engine.put(event1)
 
         # 特定合约行情事件
         event2 = Event(
-            type_=(EVENT_TYPE.EVENT_MARKET_DATA_CONTRACT + data['InstrumentID']))
+            type_=(EventType.EVENT_MARKET_DATA_CONTRACT + data['InstrumentID']))
         event2.dict_['data'] = data
         self.__event_engine.put(event2)
 
@@ -263,7 +263,7 @@ class RealTimeBroker(TdApi):
 
     def onFrontConnected(self):
         """服务器连接"""
-        event = Event(type_=EVENT_TYPE.EVENT_LOG)
+        event = Event(type_=EventType.EVENT_LOG)
         event.dict_['log'] = u'交易服务器连接成功'
         self.__event_engine.put(event)
 
@@ -279,7 +279,7 @@ class RealTimeBroker(TdApi):
     # ----------------------------------------------------------------------
     def onFrontDisconnected(self, n):
         """服务器断开"""
-        event = Event(type_=EVENT_TYPE.EVENT_LOG)
+        event = Event(type_=EventType.EVENT_LOG)
         event.dict_['log'] = u'交易服务器连接断开'
         self.__event_engine.put(event)
 
@@ -296,7 +296,7 @@ class RealTimeBroker(TdApi):
     # ----------------------------------------------------------------------
     def onRspUserLogin(self, data, error, n, last):
         """登陆回报"""
-        event = Event(type_=EVENT_TYPE.EVENT_LOG)
+        event = Event(type_=EventType.EVENT_LOG)
 
         if error['ErrorID'] == 0:
             log = u'交易服务器登陆成功'
@@ -313,7 +313,7 @@ class RealTimeBroker(TdApi):
     # ----------------------------------------------------------------------
     def onRspUserLogout(self, data, error, n, last):
         """登出回报"""
-        event = Event(type_=EVENT_TYPE.EVENT_LOG)
+        event = Event(type_=EventType.EVENT_LOG)
 
         if error['ErrorID'] == 0:
             log = u'交易服务器登出成功'
@@ -338,7 +338,7 @@ class RealTimeBroker(TdApi):
     # ----------------------------------------------------------------------
     def onRspOrderInsert(self, data, error, n, last):
         """发单错误（柜台）"""
-        event = Event(type_=EVENT_TYPE.EVENT_LOG)
+        event = Event(type_=EventType.EVENT_LOG)
         log = u' 发单错误回报，错误代码：' + \
               unicode(error['ErrorID']) + u',' + u'错误信息：' + \
               error['ErrorMsg'].decode('gbk')
@@ -359,7 +359,7 @@ class RealTimeBroker(TdApi):
     # ----------------------------------------------------------------------
     def onRspOrderAction(self, data, error, n, last):
         """撤单错误（柜台）"""
-        event = Event(type_=EVENT_TYPE.EVENT_LOG)
+        event = Event(type_=EventType.EVENT_LOG)
         log = u'撤单错误回报，错误代码：' + \
               unicode(error['ErrorID']) + u',' + u'错误信息：' + \
               error['ErrorMsg'].decode('gbk')
@@ -374,12 +374,12 @@ class RealTimeBroker(TdApi):
     # ----------------------------------------------------------------------
     def onRspSettlementInfoConfirm(self, data, error, n, last):
         """确认结算信息回报"""
-        event = Event(type_=EVENT_TYPE.EVENT_LOG)
+        event = Event(type_=EventType.EVENT_LOG)
         log = u'结算信息确认完成'
         event.dict_['log'] = log
         self.__event_engine.put(event)
 
-        event = Event(type_=EVENT_TYPE.EVENT_TDLOGIN)
+        event = Event(type_=EventType.EVENT_TDLOGIN)
         self.__event_engine.put(event)
 
         # ----------------------------------------------------------------------
@@ -432,11 +432,11 @@ class RealTimeBroker(TdApi):
     def onRspQryInvestorPosition(self, data, error, n, last):
         """持仓查询回报"""
         if error['ErrorID'] == 0:
-            event = Event(type_=EVENT_TYPE.EVENT_POSITION)
+            event = Event(type_=EventType.EVENT_POSITION)
             event.dict_['data'] = data
             self.__event_engine.put(event)
         else:
-            event = Event(type_=EVENT_TYPE.EVENT_LOG)
+            event = Event(type_=EventType.EVENT_LOG)
             log = u'持仓查询回报，错误代码：' + \
                   unicode(error['ErrorID']) + u',' + u'错误信息：' + \
                   error['ErrorMsg'].decode('gbk')
@@ -447,11 +447,11 @@ class RealTimeBroker(TdApi):
     def onRspQryTradingAccount(self, data, error, n, last):
         """资金账户查询回报"""
         if error['ErrorID'] == 0:
-            event = Event(type_=EVENT_TYPE.EVENT_ACCOUNT)
+            event = Event(type_=EventType.EVENT_ACCOUNT)
             event.dict_['data'] = data
             self.__event_engine.put(event)
         else:
-            event = Event(type_=EVENT_TYPE.EVENT_LOG)
+            event = Event(type_=EventType.EVENT_LOG)
             log = u'账户查询回报，错误代码：' + \
                   unicode(error['ErrorID']) + u',' + u'错误信息：' + \
                   error['ErrorMsg'].decode('gbk')
@@ -462,11 +462,11 @@ class RealTimeBroker(TdApi):
     def onRspQryInvestor(self, data, error, n, last):
         """投资者查询回报"""
         if error['ErrorID'] == 0:
-            event = Event(type_=EVENT_TYPE.EVENT_INVESTOR)
+            event = Event(type_=EventType.EVENT_INVESTOR)
             event.dict_['data'] = data
             self.__event_engine.put(event)
         else:
-            event = Event(type_=EVENT_TYPE.EVENT_LOG)
+            event = Event(type_=EventType.EVENT_LOG)
             log = u'合约投资者回报，错误代码：' + \
                   unicode(error['ErrorID']) + u',' + u'错误信息：' + \
                   error['ErrorMsg'].decode('gbk')
@@ -507,12 +507,12 @@ class RealTimeBroker(TdApi):
         （由于耗时过长目前使用其他进程读取）
         """
         if error['ErrorID'] == 0:
-            event = Event(type_=EVENT_TYPE.EVENT_INSTRUMENT)
+            event = Event(type_=EventType.EVENT_INSTRUMENT)
             event.dict_['data'] = data
             event.dict_['last'] = last
             self.__event_engine.put(event)
         else:
-            event = Event(type_=EVENT_TYPE.EVENT_LOG)
+            event = Event(type_=EventType.EVENT_LOG)
             log = u'合约投资者回报，错误代码：' + \
                   unicode(error['ErrorID']) + u',' + u'错误信息：' + \
                   error['ErrorMsg'].decode('gbk')
@@ -529,7 +529,7 @@ class RealTimeBroker(TdApi):
     def onRspQrySettlementInfo(self, data, error, n, last):
         """查询结算信息回报"""
         if last:
-            event = Event(type_=EVENT_TYPE.EVENT_LOG)
+            event = Event(type_=EventType.EVENT_LOG)
             log = u'结算信息查询完成'
             event.dict_['log'] = log
             self.__event_engine.put(event)
@@ -634,7 +634,7 @@ class RealTimeBroker(TdApi):
     # ----------------------------------------------------------------------
     def onRspError(self, error, n, last):
         """错误回报"""
-        event = Event(type_=EVENT_TYPE.EVENT_LOG)
+        event = Event(type_=EventType.EVENT_LOG)
         log = u'交易错误回报，错误代码：' + \
               unicode(error['ErrorID']) + u',' + u'错误信息：' + \
               error['ErrorMsg'].decode('gbk')
@@ -649,12 +649,12 @@ class RealTimeBroker(TdApi):
         self.__order_ref = max(self.__order_ref, int(newref))
 
         # 常规报单事件
-        event1 = Event(type_=EVENT_TYPE.EVENT_ORDER)
+        event1 = Event(type_=EventType.EVENT_ORDER)
         event1.dict_['data'] = data
         self.__event_engine.put(event1)
 
         # 特定合约行情事件
-        event2 = Event(type_=(EVENT_TYPE.EVENT_ORDER_REF + data['OrderRef']))
+        event2 = Event(type_=(EventType.EVENT_ORDER_REF + data['OrderRef']))
         event2.dict_['data'] = data
         self.__event_engine.put(event2)
 
@@ -662,20 +662,20 @@ class RealTimeBroker(TdApi):
     def onRtnTrade(self, data):
         """成交回报"""
         # 常规成交事件
-        event1 = Event(type_=EVENT_TYPE.EVENT_TRADE)
+        event1 = Event(type_=EventType.EVENT_TRADE)
         event1.dict_['data'] = data
         self.__event_engine.put(event1)
 
         # 特定合约成交事件
         event2 = Event(
-            type_=(EVENT_TYPE.EVENT_TRADE_CONTRACT + data['InstrumentID']))
+            type_=(EventType.EVENT_TRADE_CONTRACT + data['InstrumentID']))
         event2.dict_['data'] = data
         self.__event_engine.put(event2)
 
     # ----------------------------------------------------------------------
     def onErrRtnOrderInsert(self, data, error):
         """发单错误回报（交易所）"""
-        event = Event(type_=EVENT_TYPE.EVENT_LOG)
+        event = Event(type_=EventType.EVENT_LOG)
         log = u'发单错误回报，错误代码：' + \
               unicode(error['ErrorID']) + u',' + u'错误信息：' + \
               error['ErrorMsg'].decode('gbk')
@@ -685,7 +685,7 @@ class RealTimeBroker(TdApi):
     # ----------------------------------------------------------------------
     def onErrRtnOrderAction(self, data, error):
         """撤单错误回报（交易所）"""
-        event = Event(type_=EVENT_TYPE.EVENT_LOG)
+        event = Event(type_=EventType.EVENT_LOG)
         log = u'撤单错误回报，错误代码：' + \
               unicode(error['ErrorID']) + u',' + u'错误信息：' + \
               error['ErrorMsg'].decode('gbk')

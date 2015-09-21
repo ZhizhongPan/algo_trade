@@ -27,7 +27,8 @@ class Function(ab.Function):
         # self.__info = None
 
         if self.__name in _LS_FUNCTION_NAMES:
-            pass
+            self.__doc__ = ls_talib.__getattribute__(self.__name).func_doc
+
             # self.parameters = {}
         else:
             super(Function, self).__init__(func_name, *args, **kwargs)
